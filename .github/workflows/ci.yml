@@ -1,0 +1,66 @@
+name: Continuous integration
+on: [push, pull_request]
+
+jobs:
+  check:
+    name: Build and test
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - 1.77 # MSRV
+          - stable
+          - nightly
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
+      - name: Cargo cache (platform-independent)
+        uses: actions/cache@v4
+        with:
+          path: |-
+            /home/runner/.cargo/.crates.toml
+            /home/runner/.cargo/.crates2.json
+            /home/runner/.cargo/registry/index/
+            /home/runner/.cargo/registry/cache/
+            /home/runner/.cargo/git/db/
+          key: cargo-home-${{ matrix.rust }}
+
+      - name: Cargo cache (build)
+        uses: actions/cache@v4
+        with:
+          path: |-
+            target
+          key: cargo-build-${{ runner.os }}-${{ matrix.rust }}
+
+      - name: Cargo cache (build conformance)
+        uses: actions/cache@v4
+        with:
+          path: |-
+            conformance/target
+          key: cargo-build-conformance-${{ runner.os }}-${{ matrix.rust }}
+        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Select Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Build code
+        run: cargo build
+
+      - name: Format code
+        run: cargo fmt --all -- --check
+        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Lint code
+        run: cargo clippy -- -D warnings
+        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Test conformance
+        run: cd conformance && cargo run
+        if: ${{ matrix.rust == 'stable' }}
