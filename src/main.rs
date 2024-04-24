@@ -1,12 +1,17 @@
+use common::CrateName;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::{
-    fs,
-    io::{self, Read, Write},
+    collections::{BTreeMap, BTreeSet},
+    fs::{self, File},
+    io::{self, BufRead, BufReader, Read, Write},
     path::{Component, Path, PathBuf},
     str,
 };
 use url::Url;
+
+#[cfg(feature = "html")]
+mod html;
 
 #[derive(Debug, argh::FromArgs)]
 /// Manage a static crate registry
@@ -20,6 +25,7 @@ struct Args {
 enum Subcommand {
     Init(InitArgs),
     Add(AddArgs),
+    GenerateHtml(GenerateHtmlArgs),
 }
 
 /// Initialize a new registry
@@ -30,6 +36,18 @@ struct InitArgs {
     /// the URL that the registry is hosted at
     #[argh(option)]
     base_url: Option<Url>,
+
+    /// use default values where possible, instead of prompting for them
+    #[argh(switch)]
+    defaults: bool,
+
+    /// generate an HTML file showing crates in the index
+    #[argh(option)]
+    html: Option<bool>,
+
+    /// name you'd like to suggest other people call your registry
+    #[argh(option)]
+    html_suggested_registry_name: Option<String>,
 
     #[argh(positional)]
     path: PathBuf,
@@ -48,6 +66,16 @@ struct AddArgs {
     path: PathBuf,
 }
 
+/// Generate an HTML index for the registry
+#[derive(Debug, argh::FromArgs)]
+#[argh(subcommand)]
+#[argh(name = "generate-html")]
+struct GenerateHtmlArgs {
+    /// path to the registry to modify
+    #[argh(option)]
+    registry: PathBuf,
+}
+
 #[snafu::report]
 fn main() -> Result<(), Error> {
     let args: Args = argh::from_env();
@@ -58,6 +86,7 @@ fn main() -> Result<(), Error> {
     match args.subcommand {
         Subcommand::Init(init) => do_init(global, init)?,
         Subcommand::Add(add) => do_add(global, add)?,
+        Subcommand::GenerateHtml(html) => do_generate_html(global, html)?,
     }
 
     Ok(())
@@ -77,13 +106,26 @@ enum Error {
 
     #[snafu(transparent)]
     Add { source: AddError },
+
+    #[snafu(transparent)]
+    Html { source: HtmlError },
 }
 
 trait UnwrapOrDialog<T> {
+    fn apply_default(self, use_default: bool, value: impl Into<T>) -> Self;
+
     fn unwrap_or_dialog(self, f: impl FnOnce() -> dialoguer::Result<T>) -> dialoguer::Result<T>;
 }
 
 impl<T> UnwrapOrDialog<T> for Option<T> {
+    fn apply_default(self, use_default: bool, value: impl Into<T>) -> Self {
+        if self.is_none() && use_default {
+            Some(value.into())
+        } else {
+            self
+        }
+    }
+
     fn unwrap_or_dialog(self, f: impl FnOnce() -> dialoguer::Result<T>) -> dialoguer::Result<T> {
         match self {
             Some(v) => Ok(v),
@@ -104,9 +146,58 @@ fn do_init(_global: &Global, init: InitArgs) -> Result<(), DoInitializeError> {
         })
         .context(BaseUrlSnafu)?;
 
-    let config = ConfigV1 { base_url };
+    let enabled = init
+        .html
+        .apply_default(init.defaults, ConfigV1Html::USER_DEFAULT_ENABLED)
+        .unwrap_or_dialog(|| {
+            dialoguer::Confirm::new()
+                .default(ConfigV1Html::USER_DEFAULT_ENABLED)
+                .show_default(true)
+                .with_prompt("Enable HTML index generation?")
+                .interact()
+        })
+        .context(HtmlEnabledSnafu)?;
 
-    Registry::initialize(config, &init.path)?;
+    let suggested_registry_name = if enabled {
+        let name = init
+            .html_suggested_registry_name
+            .apply_default(
+                init.defaults,
+                ConfigV1Html::USER_DEFAULT_SUGGESTED_REGISTRY_NAME,
+            )
+            .unwrap_or_dialog(|| {
+                dialoguer::Input::new()
+                    .default(ConfigV1Html::USER_DEFAULT_SUGGESTED_REGISTRY_NAME.to_owned())
+                    .show_default(true)
+                    .with_prompt("Name you'd like to suggest other people call your registry")
+                    .interact()
+            })
+            .context(HtmlSuggestedRegistryNameSnafu)?;
+
+        Some(name)
+    } else {
+        None
+    };
+
+    let config = ConfigV1 {
+        base_url,
+        html: ConfigV1Html {
+            enabled,
+            suggested_registry_name,
+        },
+    };
+
+    let r = Registry::initialize(config, &init.path)?;
+
+    if r.config.html.enabled {
+        let res = r.generate_html();
+
+        if cfg!(feature = "html") {
+            res?;
+        } else if let Err(e) = res {
+            eprintln!("Warning: {e}");
+        }
+    }
 
     Ok(())
 }
@@ -117,14 +208,33 @@ enum DoInitializeError {
     #[snafu(display("Could not determine the base URL"))]
     BaseUrl { source: dialoguer::Error },
 
+    #[snafu(display("Could not determine if HTML generation is enabled"))]
+    HtmlEnabled { source: dialoguer::Error },
+
+    #[snafu(display("Could not determine the suggested registry name"))]
+    HtmlSuggestedRegistryName { source: dialoguer::Error },
+
     #[snafu(transparent)]
     Initialize { source: InitializeError },
+
+    #[snafu(transparent)]
+    Html { source: HtmlError },
 }
 
 fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
     let r = Registry::open(&add.registry)?;
     r.add(global, &add.path)?;
 
+    if r.config.html.enabled {
+        r.generate_html()?;
+    }
+
+    Ok(())
+}
+
+fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Error> {
+    let r = Registry::open(html.registry)?;
+    r.generate_html()?;
     Ok(())
 }
 
@@ -133,6 +243,8 @@ struct Registry {
     path: PathBuf,
     config: ConfigV1,
 }
+
+type ListAll = BTreeMap<CrateName, BTreeMap<String, index_entry::Root>>;
 
 impl Registry {
     fn initialize(config: ConfigV1, path: impl Into<PathBuf>) -> Result<Self, InitializeError> {
@@ -230,7 +342,7 @@ impl Registry {
 
         println!("Wrote crate index to `{}`", index_path.display());
 
-        let mut crate_dir = self.path.join(CRATE_DIR_NAME);
+        let mut crate_dir = self.crate_dir();
         index_entry.name.append_prefix_directories(&mut crate_dir);
         crate_dir.push(&index_entry.name);
 
@@ -245,6 +357,93 @@ impl Registry {
         println!("Wrote crate to `{}`", crate_file_path.display());
 
         Ok(())
+    }
+
+    #[cfg(feature = "html")]
+    fn generate_html(&self) -> Result<(), HtmlError> {
+        html::write(self)
+    }
+
+    #[cfg(not(feature = "html"))]
+    fn generate_html(&self) -> Result<(), HtmlError> {
+        Err(HtmlError)
+    }
+
+    fn list_crate_files(
+        crate_dir: &Path,
+    ) -> impl Iterator<Item = walkdir::Result<walkdir::DirEntry>> {
+        walkdir::WalkDir::new(crate_dir)
+            .into_iter()
+            .flat_map(|entry| {
+                let Ok(entry) = entry else { return Some(entry) };
+
+                let fname = entry.path().file_name()?;
+                let fname = Path::new(fname);
+
+                let extension = fname.extension()?;
+                if extension == "crate" {
+                    Some(Ok(entry))
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn list_index_files(&self) -> Result<BTreeSet<PathBuf>, ListIndexFilesError> {
+        use list_index_files_error::*;
+
+        let crate_dir = self.crate_dir();
+
+        let index_files = Self::list_crate_files(&crate_dir)
+            .map(|entry| {
+                let entry = entry.context(WalkdirSnafu { path: &crate_dir })?;
+
+                let mut path = entry.into_path();
+                path.pop();
+
+                let subdir = path.strip_prefix(&crate_dir).context(PrefixSnafu {
+                    path: &path,
+                    prefix: &crate_dir,
+                })?;
+                let index_path = self.path.join(subdir);
+                Ok(index_path)
+            })
+            .collect::<Result<BTreeSet<_>, ListIndexFilesError>>();
+
+        match index_files {
+            Err(e) if e.is_not_found() => Ok(Default::default()),
+            r => r,
+        }
+    }
+
+    fn list_all(&self) -> Result<ListAll, ListAllError> {
+        use list_all_error::*;
+        let mut crates = BTreeMap::new();
+
+        for path in self.list_index_files()? {
+            let path = &path;
+
+            let index_file = File::open(path).context(IndexOpenSnafu { path })?;
+            let index_file = BufReader::new(index_file);
+
+            for (i, line) in index_file.lines().enumerate() {
+                let line = line.context(IndexLineSnafu { path, line: i })?;
+                let entry = serde_json::from_str::<index_entry::Root>(&line)
+                    .context(IndexParseSnafu { path, line: i })?;
+
+                crates
+                    .entry(entry.name.clone())
+                    .or_insert_with(BTreeMap::new)
+                    .entry(entry.vers.clone())
+                    .or_insert(entry);
+            }
+        }
+
+        Ok(crates)
+    }
+
+    fn crate_dir(&self) -> PathBuf {
+        self.path.join(CRATE_DIR_NAME)
     }
 }
 
@@ -315,6 +514,74 @@ enum AddError {
 
     #[snafu(display("Could not write the crate {}", path.display()))]
     CrateWrite { source: io::Error, path: PathBuf },
+}
+
+#[cfg(feature = "html")]
+use html::Error as HtmlError;
+
+#[cfg(not(feature = "html"))]
+#[derive(Debug, Snafu)]
+#[snafu(display("Margo was not compiled with the HTML feature enabled. This binary will not be able to generate HTML files"))]
+struct HtmlError;
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum ListIndexFilesError {
+    #[snafu(display("Could not enumerate the crate directory `{}`", path.display()))]
+    Walkdir {
+        source: walkdir::Error,
+        path: PathBuf,
+    },
+
+    #[snafu(display(
+        "Could not remove the path prefix `{prefix}` from the crate package entry `{path}`",
+        prefix = prefix.display(),
+        path = path.display(),
+    ))]
+    Prefix {
+        source: std::path::StripPrefixError,
+        path: PathBuf,
+        prefix: PathBuf,
+    },
+}
+
+impl ListIndexFilesError {
+    fn is_not_found(&self) -> bool {
+        if let Self::Walkdir { source, .. } = self {
+            if let Some(e) = source.io_error() {
+                if e.kind() == io::ErrorKind::NotFound {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum ListAllError {
+    #[snafu(display("Unable to list the crate index files"))]
+    #[snafu(context(false))]
+    ListIndex { source: ListIndexFilesError },
+
+    #[snafu(display("Could not open the crate index file `{}`", path.display()))]
+    IndexOpen { source: io::Error, path: PathBuf },
+
+    #[snafu(display("Could not read crate index file `{}` at line {line}", path.display()))]
+    IndexLine {
+        source: io::Error,
+        path: PathBuf,
+        line: usize,
+    },
+
+    #[snafu(display("Could not parse crate index file `{}` at line {line}", path.display()))]
+    IndexParse {
+        source: serde_json::Error,
+        path: PathBuf,
+        line: usize,
+    },
 }
 
 fn extract_root_cargo_toml(
@@ -579,6 +846,27 @@ enum Config {
 #[derive(Debug, Serialize, Deserialize)]
 struct ConfigV1 {
     base_url: Url,
+    #[serde(default)]
+    html: ConfigV1Html,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct ConfigV1Html {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    suggested_registry_name: Option<String>,
+}
+
+impl ConfigV1Html {
+    const USER_DEFAULT_ENABLED: bool = true;
+    const USER_DEFAULT_SUGGESTED_REGISTRY_NAME: &'static str = "my-awesome-registry";
+
+    fn suggested_registry_name(&self) -> &str {
+        self.suggested_registry_name
+            .as_deref()
+            .unwrap_or(Self::USER_DEFAULT_SUGGESTED_REGISTRY_NAME)
+    }
 }
 
 mod config_json {
@@ -604,13 +892,13 @@ mod config_json {
 }
 
 mod index_entry {
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
     use std::collections::BTreeMap;
     use url::Url;
 
     use crate::common::CrateName;
 
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct Root {
         /// The name of the package.
         pub name: CrateName,
@@ -673,7 +961,7 @@ mod index_entry {
         /// Using this is only necessary if the registry wants to support cargo
         /// versions older than 1.19, which in practice is only crates.io since
         /// those older versions do not support other registries.
-        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         pub features2: BTreeMap<String, Vec<String>>,
 
         /// The minimal supported Rust version
@@ -683,7 +971,7 @@ mod index_entry {
         pub rust_version: Option<String>,
     }
 
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct Dependency {
         /// Name of the dependency.
         ///
@@ -736,7 +1024,7 @@ mod index_entry {
         pub package: Option<String>,
     }
 
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     #[serde(rename_all = "snake_case")]
     pub enum DependencyKind {
         #[allow(unused)]
@@ -757,10 +1045,14 @@ mod common {
     };
 
     /// Contains only alphanumeric, `-`, or `_` characters.
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
     pub struct CrateName(AsciiString);
 
     impl CrateName {
+        pub fn as_str(&self) -> &str {
+            self.0.as_str()
+        }
+
         pub fn len(&self) -> usize {
             self.0.len()
         }

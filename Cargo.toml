@@ -9,12 +9,19 @@ license = "MIT OR Apache-2.0"
 description = "Manage a static Cargo registry"
 repository = "https://github.com/integer32llc/static-registry"
 
+[features]
+default = ["html"]
+
+html = ["dep:maud", "dep:indoc"]
+
 [dependencies]
 argh = { version = "0.1.12", default-features = false }
 ascii = { version = "1.1.0", default-features = false, features = ["serde", "std"] }
 dialoguer = { version = "0.11.0", default-features = false }
 flate2 = { version = "1.0.28", default-features = false, features = ["rust_backend"] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
+indoc = { version = "2.0.5", default-features = false, optional = true }
+maud = { version = "0.26.0", default-features = false, optional = true }
 serde = { version = "1.0.197", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 sha2 = { version = "0.10.8", default-features = false }
@@ -22,3 +29,7 @@ snafu = { version = "0.8.2", default-features = false, features = ["rust_1_65", 
 tar = { version = "0.4.40", default-features = false }
 toml = { version = "0.8.12", default-features = false, features = ["parse", "display"] }
 url = { version = "2.5.0", default-features = false, features = ["serde"] }
+walkdir = { version = "2.5.0", default-features = false }
+
+[build-dependencies]
+regex = { version = "1.10.4", default-features = false, features = ["std"] }

@@ -70,6 +70,7 @@ impl Margo {
         this.command()
             .arg("init")
             .args(["--base-url", &format!("http://{webserver_address}")])
+            .arg("--defaults")
             .arg(&this.directory)
             .expect_success()
             .await

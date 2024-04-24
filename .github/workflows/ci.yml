@@ -17,6 +17,42 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install JS dependencies
+        run: pnpm install
+
+      - name: Build UI assets
+        run: pnpm build
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
       # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
       - name: Cargo cache (platform-independent)
         uses: actions/cache@v4
@@ -43,12 +79,6 @@ jobs:
             conformance/target
           key: cargo-build-conformance-${{ runner.os }}-${{ matrix.rust }}
         if: ${{ matrix.rust == 'stable' }}
-
-      - name: Select Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
 
       - name: Build code
         run: cargo build
