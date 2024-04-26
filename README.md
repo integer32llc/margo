@@ -20,11 +20,19 @@ cargo install margo
 
 ### Initialize the registry
 
+This will create a new registry in the directory 
+`my-registry-directory` that you plan to serve from 
+`https://my-registry.example.com`.
+
 ```bash
 margo init my-registry-directory --base-url https://my-registry.example.com
 ```
 
 ### Add a crate to the registry
+
+To add a new crate or version to the registry, run `margo add` and specify
+the path to the directory you gave to `margo init` and the `.crate` file
+to publish.
 
 ```bash
 # Acquire a crate package, such as by running `cargo package`
@@ -33,9 +41,17 @@ margo add --registry my-registry-directory some-crate/target/package/some-crate-
 
 ### Serve the registry files with your choice of webserver
 
+For example, using Python and serving the registry in the directory
+at `127.0.0.1`:
+
 ```bash
 python3 -m http.server --bind '127.0.0.1' my-registry-directory
 ```
+
+You should be able to visit `127.0.0.1/config.json` in your browser.
+Your next step is to serve those files from 
+`https://my-registry.example.com` instead, in whatever way you
+serve static files from whatever URL you've specified.
 
 ### Configure Cargo
 
