@@ -60,7 +60,7 @@ serve static files from whatever URL you've specified.
 mkdir .cargo
 cat >>.cargo/config.toml <<EOF
 [registries]
-my-registry = { index = "https://my-registry.example.com" }
+my-registry = { index = "sparse+https://my-registry.example.com" }
 EOF
 ```
 
