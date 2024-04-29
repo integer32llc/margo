@@ -20,11 +20,7 @@ pub fn write(registry: &Registry) -> Result<(), Error> {
     let assets_dir = registry.path.join("assets");
     fs::create_dir_all(&assets_dir).context(AssetDirSnafu { path: &assets_dir })?;
 
-    let css_path = {
-        let mut css_path = assets_dir;
-        css_path.push(assets::CSS_NAME);
-        css_path
-    };
+    let css_path = assets_dir.join(assets::CSS_NAME);
     fs::write(&css_path, assets::CSS).context(CssSnafu { path: &css_path })?;
 
     let css_map_path = {
@@ -35,6 +31,16 @@ pub fn write(registry: &Registry) -> Result<(), Error> {
     fs::write(&css_map_path, assets::CSS_MAP).context(CssMapSnafu {
         path: &css_map_path,
     })?;
+
+    let js_path = assets_dir.join(assets::JS_NAME);
+    fs::write(&js_path, assets::JS).context(JsSnafu { path: &js_path })?;
+
+    let js_map_path = {
+        let mut js_map_path = js_path;
+        js_map_path.as_mut_os_string().push(".map");
+        js_map_path
+    };
+    fs::write(&js_map_path, assets::JS_MAP).context(JsMapSnafu { path: &js_map_path })?;
 
     Ok(())
 }
@@ -57,6 +63,12 @@ pub enum Error {
 
     #[snafu(display("Could not write the CSS sourcemap file to {}", path.display()))]
     CssMap { source: io::Error, path: PathBuf },
+
+    #[snafu(display("Could not write the JS file to {}", path.display()))]
+    Js { source: io::Error, path: PathBuf },
+
+    #[snafu(display("Could not write the JS sourcemap file to {}", path.display()))]
+    JsMap { source: io::Error, path: PathBuf },
 }
 
 const CARGO_DOCS: &str =
@@ -93,9 +105,17 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
     fn code_block(content: impl AsRef<str>) -> Markup {
         let content = content.as_ref();
 
+        let span_class = "col-start-1 row-start-1 leading-none p-1";
+
         html! {
-            pre class="border border-black bg-theme-rose-light m-1 p-1 overflow-x-auto" {
-                code { (content) }
+            mg-copy {
+                pre class="relative border border-black bg-theme-rose-light m-1 p-1 overflow-x-auto" {
+                    button class="hidden absolute top-0 right-0 grid" data-target="copy" {
+                        span class=(span_class) data-target="state0" { "Copy" }
+                        span class={(span_class) " invisible"} data-target="state1" { "Copied" }
+                    }
+                    code data-target="content" { (content) }
+                }
             }
         }
     }

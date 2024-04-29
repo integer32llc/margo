@@ -3,7 +3,7 @@ use std::{
     env,
     fs::{self, File},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 fn main() {
@@ -24,19 +24,12 @@ fn capture_html_assets() {
 
     let entry = fs::read_to_string(&asset_index).expect("Could not read the UI entrypoint");
 
-    let find_css =
-        Regex::new(r#"href="assets/(ui.[a-zA-Z0-9]+.css)""#).expect("Invalid CSS regex");
-    let (_, [css_name]) = find_css
-        .captures(&entry)
-        .expect("Could not find CSS")
-        .extract();
-
-    let css = asset_root.join(css_name);
-    let css_map = {
-        let mut c = css.clone();
-        c.as_mut_os_string().push(".map");
-        c
-    };
+    let (css_name, css, css_map) = extract_asset(&entry, &asset_root, {
+        r#"href="assets/(ui.[a-zA-Z0-9]+.css)""#
+    });
+    let (js_name, js, js_map) = extract_asset(&entry, &asset_root, {
+        r#"src="assets/(ui.[a-zA-Z0-9]+.js)""#
+    });
 
     let out_path = env::var("OUT_DIR").expect("`OUT_DIR` must be set");
     let mut out_path = PathBuf::from(out_path);
@@ -65,11 +58,18 @@ fn capture_html_assets() {
         pub const CSS_NAME: &str = "{css_name}";
         pub const CSS: &str = include_str!("{css}");
         pub const CSS_MAP: &str = include_str!("{css_map}");
+
+        pub const JS_NAME: &str = "{js_name}";
+        pub const JS: &str = include_str!("{js}");
+        pub const JS_MAP: &str = include_str!("{js_map}");
         "##,
         asset_index = asset_index.display(),
         css_name = css_name.escape_default(),
         css = css.display(),
         css_map = css_map.display(),
+        js_name = js_name.escape_default(),
+        js = js.display(),
+        js_map = js_map.display(),
     )
     .expect("Could not write HTML assets file");
 
@@ -78,4 +78,21 @@ fn capture_html_assets() {
         "cargo::rerun-if-changed={asset_index}",
         asset_index = asset_index.display(),
     );
+}
+
+fn extract_asset<'a>(entry: &'a str, asset_root: &Path, re: &str) -> (&'a str, PathBuf, PathBuf) {
+    let find_asset = Regex::new(re).expect("Invalid asset regex");
+    let (_, [asset_name]) = find_asset
+        .captures(entry)
+        .expect("Could not find asset")
+        .extract();
+
+    let asset = asset_root.join(asset_name);
+    let asset_map = {
+        let mut a = asset.clone();
+        a.as_mut_os_string().push(".map");
+        a
+    };
+
+    (asset_name, asset, asset_map)
 }
