@@ -12,6 +12,7 @@ repository = "https://github.com/integer32llc/static-registry"
 [dependencies]
 argh = { version = "0.1.12", default-features = false }
 ascii = { version = "1.1.0", default-features = false, features = ["serde", "std"] }
+dialoguer = { version = "0.11.0", default-features = false }
 flate2 = { version = "1.0.28", default-features = false, features = ["rust_backend"] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 serde = { version = "1.0.197", default-features = false, features = ["derive", "std"] }

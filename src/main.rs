@@ -29,7 +29,7 @@ enum Subcommand {
 struct InitArgs {
     /// the URL that the registry is hosted at
     #[argh(option)]
-    base_url: Url,
+    base_url: Option<Url>,
 
     #[argh(positional)]
     path: PathBuf,
@@ -70,7 +70,7 @@ enum Error {
     Global { source: GlobalError },
 
     #[snafu(transparent)]
-    Initialize { source: InitializeError },
+    Initialize { source: DoInitializeError },
 
     #[snafu(transparent)]
     Open { source: OpenError },
@@ -79,14 +79,46 @@ enum Error {
     Add { source: AddError },
 }
 
-fn do_init(_global: &Global, init: InitArgs) -> Result<(), InitializeError> {
-    let config = ConfigV1 {
-        base_url: init.base_url,
-    };
+trait UnwrapOrDialog<T> {
+    fn unwrap_or_dialog(self, f: impl FnOnce() -> dialoguer::Result<T>) -> dialoguer::Result<T>;
+}
+
+impl<T> UnwrapOrDialog<T> for Option<T> {
+    fn unwrap_or_dialog(self, f: impl FnOnce() -> dialoguer::Result<T>) -> dialoguer::Result<T> {
+        match self {
+            Some(v) => Ok(v),
+            None => f(),
+        }
+    }
+}
+
+fn do_init(_global: &Global, init: InitArgs) -> Result<(), DoInitializeError> {
+    use do_initialize_error::*;
+
+    let base_url = init
+        .base_url
+        .unwrap_or_dialog(|| {
+            dialoguer::Input::new()
+                .with_prompt("What URL will the registry be served from")
+                .interact()
+        })
+        .context(BaseUrlSnafu)?;
+
+    let config = ConfigV1 { base_url };
 
     Registry::initialize(config, &init.path)?;
 
     Ok(())
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum DoInitializeError {
+    #[snafu(display("Could not determine the base URL"))]
+    BaseUrl { source: dialoguer::Error },
+
+    #[snafu(transparent)]
+    Initialize { source: InitializeError },
 }
 
 fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
