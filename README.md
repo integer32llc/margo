@@ -20,8 +20,8 @@ cargo install margo
 
 ### Initialize the registry
 
-This will create a new registry in the directory 
-`my-registry-directory` that you plan to serve from 
+This will create a new registry in the directory
+`my-registry-directory` that you plan to serve from
 `https://my-registry.example.com`.
 
 ```bash
@@ -49,7 +49,7 @@ python3 -m http.server --bind '127.0.0.1' my-registry-directory
 ```
 
 You should be able to visit `127.0.0.1/config.json` in your browser.
-Your next step is to serve those files from 
+Your next step is to serve those files from
 `https://my-registry.example.com` instead, in whatever way you
 serve static files from whatever URL you've specified.
 
