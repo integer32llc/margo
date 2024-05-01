@@ -97,3 +97,18 @@ jobs:
       - name: Test conformance
         run: cd conformance && cargo run
         if: ${{ matrix.rust == 'stable' }}
+
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: integration-tests
+          bundler-cache: true
+        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Test UI
+        run: cd integration-tests && bundle exec rspec
+        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Lint UI Tests
+        run: cd integration-tests && bundle exec rubocop
+        if: ${{ matrix.rust == 'stable' }}

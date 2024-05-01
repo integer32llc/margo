@@ -164,7 +164,7 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
                                         span class="truncate" { (c.as_str()) }
                                     }
                                     td {
-                                        select class="w-full" {
+                                        select class="w-full" name="version" {
                                             @for v in v.keys() {
                                                 option { (v) }
                                             }
