@@ -5,9 +5,8 @@ use std::{fs, io, path::PathBuf};
 
 use crate::{ConfigV1, ListAll, Registry};
 
-mod assets {
-    include!(concat!(env!("OUT_DIR"), "/html/assets.rs"));
-}
+#[rustfmt::skip]
+mod assets;
 
 pub fn write(registry: &Registry) -> Result<(), Error> {
     use error::*;

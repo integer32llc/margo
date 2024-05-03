@@ -2,16 +2,9 @@ name: Continuous integration
 on: [push, pull_request]
 
 jobs:
-  check:
-    name: Build and test
-
+  assets:
+    name: Build assets
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - 1.77 # MSRV
-          - stable
-          - nightly
 
     steps:
       - name: Checkout code
@@ -49,6 +42,43 @@ jobs:
 
       - name: Format UI assets
         run: pnpm fmt:check
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Convert assets to Rust
+        run: cargo xtask assets
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets
+          path: src/html/assets.rs
+
+  check:
+    name: Build and test
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - 1.77 # MSRV
+          - stable
+          - nightly
+
+    needs: assets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          name: assets
+          path: src/html
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
