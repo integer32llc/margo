@@ -41,7 +41,7 @@ class Crate
     package = @root.join('target', 'package', "#{name}-#{version}.crate")
 
     system(
-      '../target/debug/margo',
+      MARGO_BINARY,
       'add',
       '--registry',
       registry.root.to_s,

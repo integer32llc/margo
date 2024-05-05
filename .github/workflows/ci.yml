@@ -37,11 +37,11 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install
 
-      - name: Build UI assets
-        run: pnpm build
-
       - name: Format UI assets
         run: pnpm fmt:check
+
+      - name: Build UI assets
+        run: pnpm build
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -57,10 +57,10 @@ jobs:
           name: assets
           path: src/html/assets.rs
 
-  check:
-    name: Build and test
-
+  build:
+    name: Build
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         rust:
@@ -84,7 +84,6 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
 
       # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
       - name: Cargo cache (platform-independent)
@@ -105,40 +104,69 @@ jobs:
             target
           key: cargo-build-${{ runner.os }}-${{ matrix.rust }}
 
+      - name: Build code
+        run: cargo build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.rust }}
+          path: target/debug/margo
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          name: assets
+          path: src/html
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-stable
+          path: .
+
+      - name: Register binary
+        run: |
+          MARGO_BINARY="$(pwd)/margo"
+          chmod +x "${MARGO_BINARY}"
+          echo "MARGO_BINARY=${MARGO_BINARY}" >> $GITHUB_ENV
+          echo "${MARGO_BINARY}"
+          "${MARGO_BINARY}" --help
+
       - name: Cargo cache (build conformance)
         uses: actions/cache@v4
         with:
           path: |-
             conformance/target
           key: cargo-build-conformance-${{ runner.os }}-${{ matrix.rust }}
-        if: ${{ matrix.rust == 'stable' }}
-
-      - name: Build code
-        run: cargo build
 
       - name: Format code
         run: cargo fmt --all -- --check
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Lint code
         run: cargo clippy -- -D warnings
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Test conformance
         run: cd conformance && cargo run
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
           working-directory: integration-tests
           bundler-cache: true
-        if: ${{ matrix.rust == 'stable' }}
-
-      - name: Test UI
-        run: cd integration-tests && bundle exec rspec
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Lint UI Tests
         run: cd integration-tests && bundle exec rubocop
-        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Test UI
+        run: cd integration-tests && bundle exec rspec

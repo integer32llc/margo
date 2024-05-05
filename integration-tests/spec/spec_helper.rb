@@ -30,13 +30,17 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 
-  config.before(:suite) do
-    system(
-      'cargo', 'build',
-      exception: true,
-    )
+  unless ENV.key?('MARGO_BINARY')
+    config.before(:suite) do
+      system(
+        'cargo', 'build',
+        exception: true,
+      )
+    end
   end
 end
+
+MARGO_BINARY = ENV.fetch('MARGO_BINARY', '../target/debug/margo')
 
 Capybara.default_driver = Capybara.javascript_driver = :selenium_headless
 Capybara.run_server = false

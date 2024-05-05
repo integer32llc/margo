@@ -13,7 +13,7 @@ class Registry
   def start
     @server.start
     system(
-      '../target/debug/margo',
+      MARGO_BINARY,
       'init',
       '--base-url',
       url,

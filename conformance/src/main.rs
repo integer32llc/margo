@@ -4,14 +4,16 @@
 use axum::Router;
 use registry_conformance::{CommandExt, CreatedCrate, Registry};
 use snafu::prelude::*;
-use std::{future::IntoFuture, io, net::SocketAddr, path::PathBuf, process::ExitCode};
+use std::{env, future::IntoFuture, io, net::SocketAddr, path::{Path, PathBuf}, process::ExitCode};
 use tokio::{net::TcpListener, process::Command, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() -> Result<ExitCode, BuildError> {
-    Margo::build().await?;
+    if env::var_os("MARGO_BINARY").is_none() {
+        Margo::build().await?;
+    }
 
     Ok(registry_conformance::test_conformance::<Margo>(std::env::args()).await)
 }
@@ -109,7 +111,10 @@ impl Margo {
     }
 
     fn command(&self) -> Command {
-        let mut cmd = Command::new(Self::EXE_PATH);
+        let exe_path = env::var_os("MARGO_BINARY").map(PathBuf::from);
+        let exe_path = exe_path.as_deref().unwrap_or_else(|| Path::new(Self::EXE_PATH));
+
+        let mut cmd = Command::new(exe_path);
 
         cmd.kill_on_drop(true);
 
