@@ -81,3 +81,7 @@ cargo add --registry my-registry some-crate
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Development
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md).
