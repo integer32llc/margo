@@ -48,6 +48,11 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
+        with:
+          key: assets
+
       - name: Convert assets to Rust
         run: cargo xtask assets
 
@@ -85,24 +90,10 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
-      - name: Cargo cache (platform-independent)
-        uses: actions/cache@v4
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
         with:
-          path: |-
-            /home/runner/.cargo/.crates.toml
-            /home/runner/.cargo/.crates2.json
-            /home/runner/.cargo/registry/index/
-            /home/runner/.cargo/registry/cache/
-            /home/runner/.cargo/git/db/
-          key: cargo-home-${{ matrix.rust }}
-
-      - name: Cargo cache (build)
-        uses: actions/cache@v4
-        with:
-          path: |-
-            target
-          key: cargo-build-${{ runner.os }}-${{ matrix.rust }}
+          key: build-${{ matrix.rust }}
 
       - name: Build code
         run: cargo build
@@ -129,6 +120,23 @@ jobs:
           name: assets
           path: src/html
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
+        with:
+          key: check
+          lockfiles: |-
+            Cargo.lock
+            conformance/Cargo.lock
+          targets: |-
+            target
+            conformance/target
+
       - name: Download binary
         uses: actions/download-artifact@v4
         with:
@@ -142,13 +150,6 @@ jobs:
           echo "MARGO_BINARY=${MARGO_BINARY}" >> $GITHUB_ENV
           echo "${MARGO_BINARY}"
           "${MARGO_BINARY}" --help
-
-      - name: Cargo cache (build conformance)
-        uses: actions/cache@v4
-        with:
-          path: |-
-            conformance/target
-          key: cargo-build-conformance-${{ runner.os }}-${{ matrix.rust }}
 
       - name: Format code
         run: cargo fmt --all -- --check
