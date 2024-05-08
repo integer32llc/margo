@@ -45,7 +45,7 @@ For example, using Python and serving the registry in the directory
 at `127.0.0.1`:
 
 ```bash
-python3 -m http.server --bind '127.0.0.1' my-registry-directory
+python3 -m http.server --bind '127.0.0.1' --dir 'my-registry-directory'
 ```
 
 You should be able to visit `127.0.0.1/config.json` in your browser.
