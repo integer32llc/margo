@@ -77,6 +77,8 @@ cargo add --registry my-registry some-crate
 - 💅 Dependencies are not required to exist
 - 💅 Development dependency info is not stored in the index
 - 💅 Does not require JavaScript
+- 💅 Simpler so it's easier to customize for your use case
+- 💅 Access managed via however you currently manage read or write access to static files
 
 ## Contributing
 
