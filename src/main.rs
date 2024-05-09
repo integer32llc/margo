@@ -1095,6 +1095,24 @@ mod common {
         }
     }
 
+    impl TryFrom<&str> for CrateName {
+        type Error = CrateNameError;
+
+        fn try_from(value: &str) -> Result<Self, Self::Error> {
+            value.to_owned().try_into()
+        }
+    }
+
+    impl TryFrom<String> for CrateName {
+        type Error = CrateNameError;
+
+        fn try_from(value: String) -> Result<Self, Self::Error> {
+            AsciiString::from_ascii(value)
+                .map_err(|e| e.ascii_error())?
+                .try_into()
+        }
+    }
+
     impl TryFrom<AsciiString> for CrateName {
         type Error = CrateNameError;
 
@@ -1123,6 +1141,9 @@ mod common {
 
         #[snafu(display("The crate name must only contain alphanumeric characters, hyphen (-) or underscore (_), not {chr}"))]
         ContainsInvalidChar { chr: char },
+
+        #[snafu(transparent)]
+        NotAscii { source: ascii::AsAsciiStrError },
     }
 
     impl<'de> Deserialize<'de> for CrateName {
