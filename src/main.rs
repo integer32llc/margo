@@ -318,10 +318,15 @@ impl Registry {
         let index_entry =
             adapt_cargo_toml_to_index_entry(global, &self.config, cargo_toml, checksum_hex);
 
-        let mut index_path = self.path.clone();
-        index_entry.name.append_prefix_directories(&mut index_path);
-        fs::create_dir_all(&index_path).context(IndexDirSnafu { path: &index_path })?;
-        index_path.push(&index_entry.name);
+        let index_path = self.index_file_path_for(&index_entry.name);
+        if let Some(path) = index_path.parent() {
+            fs::create_dir_all(path).context(IndexDirSnafu { path })?;
+        }
+
+        let crate_file_path = self.crate_file_path_for(&index_entry.name, &index_entry.vers);
+        if let Some(path) = crate_file_path.parent() {
+            fs::create_dir_all(path).context(CrateDirSnafu { path })?;
+        }
 
         // FUTURE: Add `yank` subcommand
         // FUTURE: Add `remove` subcommand
@@ -341,15 +346,6 @@ impl Registry {
         .context(IndexWriteSnafu { path: &index_path })?;
 
         println!("Wrote crate index to `{}`", index_path.display());
-
-        let mut crate_dir = self.crate_dir();
-        index_entry.name.append_prefix_directories(&mut crate_dir);
-        crate_dir.push(&index_entry.name);
-
-        fs::create_dir_all(&crate_dir).context(CrateDirSnafu { path: &crate_dir })?;
-
-        let mut crate_file_path = crate_dir;
-        crate_file_path.push(&format!("{}.crate", index_entry.vers));
 
         fs::write(&crate_file_path, &crate_file).context(CrateWriteSnafu {
             path: &crate_file_path,
@@ -444,6 +440,26 @@ impl Registry {
 
     fn crate_dir(&self) -> PathBuf {
         self.path.join(CRATE_DIR_NAME)
+    }
+
+    fn index_file_path_for(&self, name: &CrateName) -> PathBuf {
+        let mut index_path = self.path.clone();
+        name.append_prefix_directories(&mut index_path);
+        index_path.push(name);
+        index_path
+    }
+
+    fn crate_dir_for(&self, name: &CrateName) -> PathBuf {
+        let mut crate_dir = self.crate_dir();
+        name.append_prefix_directories(&mut crate_dir);
+        crate_dir.push(name);
+        crate_dir
+    }
+
+    fn crate_file_path_for(&self, name: &CrateName, version: &str) -> PathBuf {
+        let mut crate_file_path = self.crate_dir_for(name);
+        crate_file_path.push(&format!("{}.crate", version));
+        crate_file_path
     }
 }
 
