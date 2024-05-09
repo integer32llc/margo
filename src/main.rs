@@ -4,7 +4,7 @@ use snafu::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, BufWriter, Read, Write},
     path::{Component, Path, PathBuf},
     str,
 };
@@ -244,7 +244,8 @@ struct Registry {
     config: ConfigV1,
 }
 
-type ListAll = BTreeMap<CrateName, BTreeMap<String, index_entry::Root>>;
+type Index = BTreeMap<String, index_entry::Root>;
+type ListAll = BTreeMap<CrateName, Index>;
 
 impl Registry {
     fn initialize(config: ConfigV1, path: impl Into<PathBuf>) -> Result<Self, InitializeError> {
@@ -330,20 +331,15 @@ impl Registry {
 
         // FUTURE: Add `yank` subcommand
         // FUTURE: Add `remove` subcommand
-        // FUTURE: Handle republishing the same version
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)
-        let entry = serde_json::to_string(&index_entry).context(IndexEntrySerializeSnafu)?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&index_path)
-            .context(IndexOpenSnafu { path: &index_path })?;
 
-        (|| {
-            file.write_all(entry.as_bytes())?;
-            file.write_all(b"\n")
-        })()
-        .context(IndexWriteSnafu { path: &index_path })?;
+        let mut index_file =
+            Self::parse_index_file(&index_path).context(IndexParseSnafu { path: &index_path })?;
+
+        index_file.insert(index_entry.vers.clone(), index_entry);
+
+        Self::write_index_file(index_file, &index_path)
+            .context(IndexWriteSnafu { path: &index_path })?;
 
         println!("Wrote crate index to `{}`", index_path.display());
 
@@ -414,28 +410,55 @@ impl Registry {
 
     fn list_all(&self) -> Result<ListAll, ListAllError> {
         use list_all_error::*;
+
         let mut crates = BTreeMap::new();
 
         for path in self.list_index_files()? {
-            let path = &path;
+            let index = Self::parse_index_file(&path).context(ParseSnafu { path })?;
 
-            let index_file = File::open(path).context(IndexOpenSnafu { path })?;
-            let index_file = BufReader::new(index_file);
-
-            for (i, line) in index_file.lines().enumerate() {
-                let line = line.context(IndexLineSnafu { path, line: i })?;
-                let entry = serde_json::from_str::<index_entry::Root>(&line)
-                    .context(IndexParseSnafu { path, line: i })?;
-
-                crates
-                    .entry(entry.name.clone())
-                    .or_insert_with(BTreeMap::new)
-                    .entry(entry.vers.clone())
-                    .or_insert(entry);
+            if let Some(entry) = index.values().next() {
+                crates.insert(entry.name.clone(), index);
             }
         }
 
         Ok(crates)
+    }
+
+    fn parse_index_file(path: &Path) -> Result<Index, ParseIndexError> {
+        use parse_index_error::*;
+
+        let index_file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Default::default()),
+            Err(e) => Err(e).context(OpenSnafu)?,
+        };
+        let index_file = BufReader::new(index_file);
+
+        let mut index = BTreeMap::new();
+
+        for (i, line) in index_file.lines().enumerate() {
+            let line = line.context(ReadSnafu { line: i })?;
+            let entry =
+                serde_json::from_str::<index_entry::Root>(&line).context(ParseSnafu { line: i })?;
+
+            index.insert(entry.vers.clone(), entry);
+        }
+
+        Ok(index)
+    }
+
+    fn write_index_file(index_file: Index, path: &Path) -> Result<(), WriteIndexError> {
+        use write_index_error::*;
+
+        let file = File::create(path).context(OpenSnafu)?;
+        let mut file = BufWriter::new(file);
+
+        for entry in index_file.values() {
+            serde_json::to_writer(&mut file, entry).context(EntrySerializeSnafu)?;
+            file.write_all(b"\n").context(EntryNewlineSnafu)?;
+        }
+
+        Ok(())
     }
 
     fn crate_dir(&self) -> PathBuf {
@@ -516,14 +539,17 @@ enum AddError {
     #[snafu(display("Could not create the crate's index directory {}", path.display()))]
     IndexDir { source: io::Error, path: PathBuf },
 
-    #[snafu(display("Could not serialize the crate's index entry"))]
-    IndexEntrySerialize { source: serde_json::Error },
-
-    #[snafu(display("Could not open the crate's index file {}", path.display()))]
-    IndexOpen { source: io::Error, path: PathBuf },
+    #[snafu(display("Could not parse the crate's index file {}", path.display()))]
+    IndexParse {
+        source: ParseIndexError,
+        path: PathBuf,
+    },
 
     #[snafu(display("Could not write the crate's index file {}", path.display()))]
-    IndexWrite { source: io::Error, path: PathBuf },
+    IndexWrite {
+        source: WriteIndexError,
+        path: PathBuf,
+    },
 
     #[snafu(display("Could not create the crate directory {}", path.display()))]
     CrateDir { source: io::Error, path: PathBuf },
@@ -582,22 +608,40 @@ enum ListAllError {
     #[snafu(context(false))]
     ListIndex { source: ListIndexFilesError },
 
-    #[snafu(display("Could not open the crate index file `{}`", path.display()))]
-    IndexOpen { source: io::Error, path: PathBuf },
-
-    #[snafu(display("Could not read crate index file `{}` at line {line}", path.display()))]
-    IndexLine {
-        source: io::Error,
+    #[snafu(display("Unable to parse the crate index file at `{}`", path.display()))]
+    Parse {
+        source: ParseIndexError,
         path: PathBuf,
-        line: usize,
     },
+}
 
-    #[snafu(display("Could not parse crate index file `{}` at line {line}", path.display()))]
-    IndexParse {
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum ParseIndexError {
+    #[snafu(display("Could not open the file"))]
+    Open { source: io::Error },
+
+    #[snafu(display("Could not read line {line}"))]
+    Read { source: io::Error, line: usize },
+
+    #[snafu(display("Could not parse line {line}"))]
+    Parse {
         source: serde_json::Error,
-        path: PathBuf,
         line: usize,
     },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum WriteIndexError {
+    #[snafu(display("Could not open the file"))]
+    Open { source: io::Error },
+
+    #[snafu(display("Could not serialize the entry"))]
+    EntrySerialize { source: serde_json::Error },
+
+    #[snafu(display("Could not write the entry's newline"))]
+    EntryNewline { source: io::Error },
 }
 
 fn extract_root_cargo_toml(
@@ -1172,5 +1216,44 @@ mod common {
 
     fn valid_crate_name_char(chr: AsciiChar) -> bool {
         chr.is_alphanumeric() || chr == AsciiChar::UnderScore || chr == AsciiChar::Minus
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use registry_conformance::{Crate, ScratchSpace};
+
+    #[tokio::test]
+    async fn adding_duplicate_crate() {
+        let global = Global::new().unwrap();
+        let scratch = ScratchSpace::new().await.unwrap();
+
+        let config = ConfigV1 {
+            base_url: "http://example.com".parse().unwrap(),
+            auth_required: false,
+            html: ConfigV1Html {
+                enabled: false,
+                suggested_registry_name: None,
+            },
+        };
+
+        let r = Registry::initialize(config, scratch.registry()).unwrap();
+
+        let c = Crate::new("duplicated", "1.0.0")
+            .lib_rs(r#"pub const ID: u8 = 1;"#)
+            .create_in(&scratch)
+            .await
+            .unwrap();
+        let p = c.package().await.unwrap();
+
+        r.add(&global, &p).unwrap();
+        r.add(&global, &p).unwrap();
+
+        let name = CrateName::try_from(c.name()).unwrap();
+        let index_file_path = r.index_file_path_for(&name);
+        let index_contents = fs::read_to_string(index_file_path).unwrap();
+
+        assert_eq!(1, index_contents.lines().count());
     }
 }

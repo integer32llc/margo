@@ -22,7 +22,9 @@ members = [
 
 [workspace.dependencies]
 argh = { version = "0.1.12", default-features = false }
+registry-conformance = { version = "0.1.0", registry = "registry-conformance" }
 snafu = { version = "0.8.2", default-features = false, features = ["rust_1_65", "std"] }
+tokio = { version = "1.37.0", default-features = false, features = ["macros", "process", "rt-multi-thread"] }
 
 [dependencies]
 argh.workspace = true
@@ -40,3 +42,7 @@ tar = { version = "0.4.40", default-features = false }
 toml = { version = "0.8.12", default-features = false, features = ["parse", "display"] }
 url = { version = "2.5.0", default-features = false, features = ["serde"] }
 walkdir = { version = "2.5.0", default-features = false }
+
+[dev-dependencies]
+registry-conformance.workspace = true
+tokio.workspace = true

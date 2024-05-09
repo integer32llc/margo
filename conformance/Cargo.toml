@@ -8,8 +8,8 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 axum = { version = "0.7.5", default-features = false, features = ["http1", "http2", "tokio"] }
-registry-conformance = { version = "0.1.0", registry = "registry-conformance" }
+registry-conformance.workspace = true
 snafu.workspace = true
-tokio = { version = "1.37.0", default-features = false, features = ["macros", "process", "rt-multi-thread"] }
+tokio.workspace = true
 tokio-util = { version = "0.7.10", default-features = false }
 tower-http = { version = "0.5.2", default-features = false, features = ["fs"] }
