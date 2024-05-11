@@ -22,7 +22,7 @@ members = [
 
 [workspace.dependencies]
 argh = { version = "0.1.12", default-features = false }
-registry-conformance = { version = "0.1.0", registry = "registry-conformance" }
+registry-conformance = { version = "0.1.1", registry = "registry-conformance" }
 snafu = { version = "0.8.2", default-features = false, features = ["rust_1_65", "std"] }
 tokio = { version = "1.37.0", default-features = false, features = ["macros", "process", "rt-multi-thread"] }
 
