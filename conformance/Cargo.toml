@@ -6,13 +6,10 @@ publish = false
 
 license = "MIT OR Apache-2.0"
 
-[workspace]
-
 [dependencies]
-registry-conformance = { git = "https://github.com/integer32llc/registry-conformance.git" }
-
 axum = { version = "0.7.5", default-features = false, features = ["http1", "http2", "tokio"] }
-snafu = { version = "0.8.2", default-features = false, features = ["rust_1_65", "std"] }
+registry-conformance = { version = "0.1.0", registry = "registry-conformance" }
+snafu.workspace = true
 tokio = { version = "1.37.0", default-features = false, features = ["macros", "process", "rt-multi-thread"] }
 tokio-util = { version = "0.7.10", default-features = false }
 tower-http = { version = "0.5.2", default-features = false, features = ["fs"] }

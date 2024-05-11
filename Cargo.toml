@@ -16,6 +16,7 @@ html = ["dep:maud", "dep:indoc"]
 
 [workspace]
 members = [
+    "conformance",
     "xtask",
 ]
 
