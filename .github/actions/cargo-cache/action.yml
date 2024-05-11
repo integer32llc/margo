@@ -1,0 +1,41 @@
+name: "Cargo Cache"
+
+inputs:
+  key:
+    description: "Unique cache key component"
+    required: true
+
+  lockfiles:
+    description: "Paths to Cargo.lock files"
+    required: true
+    default: "Cargo.lock"
+
+  targets:
+    description: "Paths to target directories"
+    required: true
+    default: "target"
+
+runs:
+  using: "composite"
+  steps:
+    # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
+    - name: Cargo cache (home)
+      uses: actions/cache@v4
+      with:
+        path: |-
+          /home/runner/.cargo/.crates.toml
+          /home/runner/.cargo/.crates2.json
+          /home/runner/.cargo/registry/index/
+          /home/runner/.cargo/registry/cache/
+          /home/runner/.cargo/git/db/
+        key: cargo-home-${{ inputs.key }}-${{ hashFiles(inputs.lockfiles) }}
+        restore-keys: |
+          cargo-home-${{ inputs.key }}-
+
+    - name: Cargo cache (build)
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.targets }}
+        key: cargo-target-${{ inputs.key }}-${{ runner.os }}-${{ hashFiles(inputs.lockfiles) }}
+        restore-keys: |
+          cargo-target-${{ inputs.key }}-${{ runner.os }}-

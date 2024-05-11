@@ -1,0 +1,30 @@
+# https://docs.rubocop.org/rubocop/configuration
+
+require:
+  - rubocop-capybara
+  - rubocop-rspec
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.3
+
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 50
+
+RSpec/ExampleLength:
+  Max: 50
+
+RSpecRails/InferredSpecType:
+  Enabled: false

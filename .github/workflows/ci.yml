@@ -2,10 +2,70 @@ name: Continuous integration
 on: [push, pull_request]
 
 jobs:
-  check:
-    name: Build and test
-
+  assets:
+    name: Build assets
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install JS dependencies
+        run: pnpm install
+
+      - name: Format UI assets
+        run: pnpm fmt:check
+
+      - name: Build UI assets
+        run: pnpm build
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
+        with:
+          key: assets
+
+      - name: Convert assets to Rust
+        run: cargo xtask assets
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets
+          path: src/html/assets.rs
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
     strategy:
       matrix:
         rust:
@@ -13,54 +73,101 @@ jobs:
           - stable
           - nightly
 
+    needs: assets
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
-      - name: Cargo cache (platform-independent)
-        uses: actions/cache@v4
+      - name: Download assets
+        uses: actions/download-artifact@v4
         with:
-          path: |-
-            /home/runner/.cargo/.crates.toml
-            /home/runner/.cargo/.crates2.json
-            /home/runner/.cargo/registry/index/
-            /home/runner/.cargo/registry/cache/
-            /home/runner/.cargo/git/db/
-          key: cargo-home-${{ matrix.rust }}
+          name: assets
+          path: src/html
 
-      - name: Cargo cache (build)
-        uses: actions/cache@v4
-        with:
-          path: |-
-            target
-          key: cargo-build-${{ runner.os }}-${{ matrix.rust }}
-
-      - name: Cargo cache (build conformance)
-        uses: actions/cache@v4
-        with:
-          path: |-
-            conformance/target
-          key: cargo-build-conformance-${{ runner.os }}-${{ matrix.rust }}
-        if: ${{ matrix.rust == 'stable' }}
-
-      - name: Select Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
+        with:
+          key: build-${{ matrix.rust }}
 
       - name: Build code
         run: cargo build
 
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.rust }}
+          path: target/debug/margo
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          name: assets
+          path: src/html
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: ./.github/actions/cargo-cache
+        with:
+          key: check
+          lockfiles: |-
+            Cargo.lock
+            conformance/Cargo.lock
+          targets: |-
+            target
+            conformance/target
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-stable
+          path: .
+
+      - name: Register binary
+        run: |
+          MARGO_BINARY="$(pwd)/margo"
+          chmod +x "${MARGO_BINARY}"
+          echo "MARGO_BINARY=${MARGO_BINARY}" >> $GITHUB_ENV
+          echo "${MARGO_BINARY}"
+          "${MARGO_BINARY}" --help
+
       - name: Format code
         run: cargo fmt --all -- --check
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Lint code
         run: cargo clippy -- -D warnings
-        if: ${{ matrix.rust == 'stable' }}
 
       - name: Test conformance
         run: cd conformance && cargo run
-        if: ${{ matrix.rust == 'stable' }}
+
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: integration-tests
+          bundler-cache: true
+
+      - name: Lint UI Tests
+        run: cd integration-tests && bundle exec rubocop
+
+      - name: Test UI
+        run: cd integration-tests && bundle exec rspec

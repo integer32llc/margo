@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gem 'capybara', '~> 3.40'
+gem 'rspec', '~> 3.13'
+gem 'selenium-webdriver', '~> 4.20'
+gem 'webrick', '~> 1.8'
+
+gem 'rubocop', '~> 1.63', require: false
+gem 'rubocop-capybara', '~> 2.20', require: false
+gem 'rubocop-rspec', '~> 2.29', require: false
