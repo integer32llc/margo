@@ -1,8 +1,18 @@
 #![deny(rust_2018_idioms)]
 #![deny(unused_crate_dependencies)]
 
-use axum::Router;
-use registry_conformance::{CommandExt, CreatedCrate, Registry};
+use axum::{
+    extract::Request,
+    http::StatusCode,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+    Router,
+};
+use axum_extra::{
+    headers::{self, authorization::Basic},
+    TypedHeader,
+};
+use registry_conformance::{CommandExt, CreatedCrate, Registry, RegistryBuilder};
 use snafu::prelude::*;
 use std::{
     env,
@@ -25,6 +35,120 @@ async fn main() -> Result<ExitCode, BuildError> {
     Ok(registry_conformance::test_conformance::<Margo>(std::env::args()).await)
 }
 
+type BasicAuth = Option<(String, String)>;
+
+#[derive(Debug, Default)]
+pub struct MargoBuilder {
+    webserver_basic_auth: BasicAuth,
+}
+
+impl MargoBuilder {
+    fn enable_basic_auth_(mut self, username: &str, password: &str) -> Self {
+        self.webserver_basic_auth = Some((username.into(), password.into()));
+        self
+    }
+
+    async fn start_(
+        self,
+        directory: impl Into<PathBuf>,
+    ) -> Result<<Self as RegistryBuilder>::Registry, StartError> {
+        use start_error::*;
+
+        let Self {
+            webserver_basic_auth,
+        } = self;
+        let auth_required = webserver_basic_auth.is_some();
+
+        let directory = directory.into();
+
+        let webserver_cancel = CancellationToken::new();
+
+        let address = "127.0.0.1:0";
+        let listener = TcpListener::bind(address)
+            .await
+            .context(BindSnafu { address })?;
+        let webserver_address = listener.local_addr().context(AddressSnafu)?;
+
+        let serve_files = ServeDir::new(&directory);
+
+        let auth_middleware = middleware::from_fn(move |hdr, req, next| {
+            let webserver_basic_auth = webserver_basic_auth.clone();
+            auth(webserver_basic_auth, hdr, req, next)
+        });
+
+        let serve_files = Router::new()
+            .fallback_service(serve_files)
+            .layer(auth_middleware);
+
+        let webserver = axum::serve(listener, serve_files)
+            .with_graceful_shutdown(webserver_cancel.clone().cancelled_owned())
+            .into_future();
+
+        let webserver = tokio::spawn(webserver);
+
+        let this = Margo {
+            directory,
+            webserver_cancel,
+            webserver_address,
+            webserver,
+        };
+
+        let mut cmd = this.command();
+
+        cmd.arg("init")
+            .args(["--base-url", &format!("http://{webserver_address}")])
+            .arg("--defaults");
+
+        if auth_required {
+            cmd.args(["--auth-required", "true"]);
+        }
+
+        cmd.arg(&this.directory)
+            .expect_success()
+            .await
+            .context(ExecutionSnafu)?;
+
+        Ok(this)
+    }
+}
+
+async fn auth(
+    webserver_basic_auth: BasicAuth,
+    auth_header: Option<TypedHeader<headers::Authorization<Basic>>>,
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if let Some((username, password)) = webserver_basic_auth {
+        let creds_match = auth_header.as_ref().map_or(false, |auth| {
+            auth.username() == username && auth.password() == password
+        });
+
+        if !creds_match {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    Ok(next.run(req).await.into_response())
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub enum StartError {
+    #[snafu(display("Could not bind to address {address}"))]
+    Bind {
+        source: std::io::Error,
+        address: String,
+    },
+
+    #[snafu(display("Could not get the listening address"))]
+    Address { source: std::io::Error },
+
+    #[snafu(display("Could not initialize the registry"))]
+    Execution {
+        source: registry_conformance::CommandError,
+    },
+}
+
 pub struct Margo {
     directory: PathBuf,
     webserver_cancel: CancellationToken,
@@ -45,47 +169,6 @@ impl Margo {
             .await
             .map(drop)
             .context(ExecutionSnafu)
-    }
-
-    async fn start_(directory: impl Into<PathBuf>) -> Result<Self, StartError> {
-        use start_error::*;
-
-        let directory = directory.into();
-
-        let webserver_cancel = CancellationToken::new();
-
-        let address = "127.0.0.1:0";
-        let listener = TcpListener::bind(address)
-            .await
-            .context(BindSnafu { address })?;
-        let webserver_address = listener.local_addr().context(AddressSnafu)?;
-
-        let serve_files = ServeDir::new(&directory);
-        let serve_files = Router::new().fallback_service(serve_files);
-
-        let webserver = axum::serve(listener, serve_files)
-            .with_graceful_shutdown(webserver_cancel.clone().cancelled_owned())
-            .into_future();
-
-        let webserver = tokio::spawn(webserver);
-
-        let this = Margo {
-            directory,
-            webserver_cancel,
-            webserver_address,
-            webserver,
-        };
-
-        this.command()
-            .arg("init")
-            .args(["--base-url", &format!("http://{webserver_address}")])
-            .arg("--defaults")
-            .arg(&this.directory)
-            .expect_success()
-            .await
-            .context(ExecutionSnafu)?;
-
-        Ok(this)
     }
 
     async fn publish_crate_(&mut self, crate_: &CreatedCrate) -> Result<(), PublishError> {
@@ -142,24 +225,6 @@ pub enum BuildError {
 
 #[derive(Debug, Snafu)]
 #[snafu(module)]
-pub enum StartError {
-    #[snafu(display("Could not bind to address {address}"))]
-    Bind {
-        source: std::io::Error,
-        address: String,
-    },
-
-    #[snafu(display("Could not get the listening address"))]
-    Address { source: std::io::Error },
-
-    #[snafu(display("Could not initialize the registry"))]
-    Execution {
-        source: registry_conformance::CommandError,
-    },
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(module)]
 pub enum PublishError {
     #[snafu(display("Could not package the crate"))]
     Package {
@@ -182,12 +247,22 @@ pub enum ShutdownError {
     Serve { source: std::io::Error },
 }
 
-impl Registry for Margo {
+impl RegistryBuilder for MargoBuilder {
+    type Registry = Margo;
     type Error = Error;
 
-    async fn start(directory: impl Into<PathBuf>) -> Result<Self, Error> {
-        Ok(Self::start_(directory).await?)
+    fn enable_basic_auth(self, username: &str, password: &str) -> Self {
+        self.enable_basic_auth_(username, password)
     }
+
+    async fn start(self, directory: impl Into<PathBuf>) -> Result<Self::Registry, Error> {
+        Ok(self.start_(directory).await?)
+    }
+}
+
+impl Registry for Margo {
+    type Builder = MargoBuilder;
+    type Error = Error;
 
     async fn registry_url(&self) -> String {
         format!("sparse+http://{}/", self.webserver_address)
