@@ -1,6 +1,3 @@
-#![deny(rust_2018_idioms)]
-#![deny(unused_crate_dependencies)]
-
 use axum::{
     extract::Request,
     http::StatusCode,
