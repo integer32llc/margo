@@ -41,6 +41,10 @@ struct InitArgs {
     #[argh(switch)]
     defaults: bool,
 
+    /// require HTTP authentication to access crates
+    #[argh(option)]
+    auth_required: Option<bool>,
+
     /// generate an HTML file showing crates in the index
     #[argh(option)]
     html: Option<bool>,
@@ -146,6 +150,18 @@ fn do_init(_global: &Global, init: InitArgs) -> Result<(), DoInitializeError> {
         })
         .context(BaseUrlSnafu)?;
 
+    let auth_required = init
+        .auth_required
+        .apply_default(init.defaults, ConfigV1::USER_DEFAULT_AUTH_REQUIRED)
+        .unwrap_or_dialog(|| {
+            dialoguer::Confirm::new()
+                .default(ConfigV1::USER_DEFAULT_AUTH_REQUIRED)
+                .show_default(true)
+                .with_prompt("Require HTTP authentication to access crates?")
+                .interact()
+        })
+        .context(AuthRequiredSnafu)?;
+
     let enabled = init
         .html
         .apply_default(init.defaults, ConfigV1Html::USER_DEFAULT_ENABLED)
@@ -181,6 +197,7 @@ fn do_init(_global: &Global, init: InitArgs) -> Result<(), DoInitializeError> {
 
     let config = ConfigV1 {
         base_url,
+        auth_required,
         html: ConfigV1Html {
             enabled,
             suggested_registry_name,
@@ -207,6 +224,9 @@ fn do_init(_global: &Global, init: InitArgs) -> Result<(), DoInitializeError> {
 enum DoInitializeError {
     #[snafu(display("Could not determine the base URL"))]
     BaseUrl { source: dialoguer::Error },
+
+    #[snafu(display("Could not determine if HTTP authorization is required"))]
+    AuthRequired { source: dialoguer::Error },
 
     #[snafu(display("Could not determine if HTML generation is enabled"))]
     HtmlEnabled { source: dialoguer::Error },
@@ -275,7 +295,7 @@ impl Registry {
         let config_json = config_json::Root {
             dl,
             api: None,
-            auth_required: false,
+            auth_required: config.auth_required,
         };
         let config_json = serde_json::to_string(&config_json).context(ConfigJsonSerializeSnafu)?;
         fs::write(&config_json_path, config_json).context(ConfigJsonWriteSnafu {
@@ -906,8 +926,16 @@ enum Config {
 #[derive(Debug, Serialize, Deserialize)]
 struct ConfigV1 {
     base_url: Url,
+
+    #[serde(default)]
+    auth_required: bool,
+
     #[serde(default)]
     html: ConfigV1Html,
+}
+
+impl ConfigV1 {
+    const USER_DEFAULT_AUTH_REQUIRED: bool = false;
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

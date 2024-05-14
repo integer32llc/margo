@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 axum = { version = "0.7.5", default-features = false, features = ["http1", "http2", "tokio"] }
+axum-extra = { version = "0.9.3", default-features = false, features = ["typed-header"] }
 registry-conformance.workspace = true
 snafu.workspace = true
 tokio.workspace = true
