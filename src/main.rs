@@ -872,7 +872,7 @@ mod cargo_toml {
 const CONFIG_FILE_NAME: &str = "margo-config.toml";
 const CRATE_DIR_NAME: &str = "crates";
 
-const CRATES_IO_INDEX_URL: &str = "sparse+https://index.crates.io/";
+const CRATES_IO_INDEX_URL: &str = "https://github.com/rust-lang/crates.io-index";
 
 #[derive(Debug)]
 struct Global {
