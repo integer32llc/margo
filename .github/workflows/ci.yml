@@ -155,7 +155,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Lint code
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test conformance
         run: cd conformance && cargo run

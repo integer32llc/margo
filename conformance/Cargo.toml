@@ -6,6 +6,9 @@ publish = false
 
 license = "MIT OR Apache-2.0"
 
+[lints]
+workspace = true
+
 [dependencies]
 axum = { version = "0.7.5", default-features = false, features = ["http1", "http2", "tokio"] }
 axum-extra = { version = "0.9.3", default-features = false, features = ["typed-header"] }
