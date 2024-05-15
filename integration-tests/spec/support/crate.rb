@@ -16,9 +16,10 @@ class Crate
   end
 
   def publish_to(registry)
-    Dir.mkdir(@root)
+    dir = @root.join(version)
+    FileUtils.mkdir_p(dir)
 
-    cargo_toml = @root.join('Cargo.toml')
+    cargo_toml = dir.join('Cargo.toml')
     File.open(cargo_toml, 'w') do |f|
       content = <<~TOML
         [package]
@@ -29,7 +30,7 @@ class Crate
       f.write(content)
     end
 
-    src = @root.join('src')
+    src = dir.join('src')
     Dir.mkdir(src)
 
     @source.each do |name, content|
@@ -37,8 +38,8 @@ class Crate
       File.write(file, content)
     end
 
-    system('cargo', 'package', '--quiet', chdir: @root, exception: true)
-    package = @root.join('target', 'package', "#{name}-#{version}.crate")
+    system('cargo', 'package', '--quiet', chdir: dir, exception: true)
+    package = dir.join('target', 'package', "#{name}-#{version}.crate")
 
     system(
       MARGO_BINARY,
