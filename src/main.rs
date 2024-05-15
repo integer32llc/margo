@@ -1,4 +1,5 @@
 use common::CrateName;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::{
@@ -264,7 +265,7 @@ struct Registry {
     config: ConfigV1,
 }
 
-type Index = BTreeMap<String, index_entry::Root>;
+type Index = BTreeMap<Version, index_entry::Root>;
 type ListAll = BTreeMap<CrateName, Index>;
 
 impl Registry {
@@ -512,7 +513,7 @@ impl Registry {
         crate_dir
     }
 
-    fn crate_file_path_for(&self, name: &CrateName, version: &str) -> PathBuf {
+    fn crate_file_path_for(&self, name: &CrateName, version: &Version) -> PathBuf {
         let mut crate_file_path = self.crate_dir_for(name);
         crate_file_path.push(&format!("{}.crate", version));
         crate_file_path
@@ -830,11 +831,12 @@ fn adapt_index(global: &Global, config: &ConfigV1, registry_index: Option<Url>) 
 /// Only intended for the normalized Cargo.toml created for the
 /// packaged crate.
 mod cargo_toml {
+    use semver::{Version, VersionReq};
     use serde::Deserialize;
     use std::collections::BTreeMap;
     use url::Url;
 
-    use crate::common::CrateName;
+    use crate::common::{CrateName, RustVersion};
 
     pub type Dependencies = BTreeMap<String, Dependency>;
 
@@ -861,19 +863,19 @@ mod cargo_toml {
     pub struct Package {
         pub name: CrateName,
 
-        pub version: String,
+        pub version: Version,
 
         #[serde(default)]
         pub links: Option<String>,
 
         #[serde(default)]
-        pub rust_version: Option<String>,
+        pub rust_version: Option<RustVersion>,
     }
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "kebab-case")]
     pub struct Dependency {
-        pub version: String,
+        pub version: VersionReq,
 
         #[serde(default)]
         pub features: Vec<String>,
@@ -1005,11 +1007,12 @@ mod config_json {
 }
 
 mod index_entry {
+    use semver::{Version, VersionReq};
     use serde::{Deserialize, Serialize};
     use std::collections::BTreeMap;
     use url::Url;
 
-    use crate::common::CrateName;
+    use crate::common::{CrateName, RustVersion};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Root {
@@ -1020,7 +1023,7 @@ mod index_entry {
         ///
         /// This must be a valid version number according to the
         /// Semantic Versioning 2.0.0 spec at https://semver.org/.
-        pub vers: String,
+        pub vers: Version,
 
         /// Direct dependencies of the package.
         pub deps: Vec<Dependency>,
@@ -1081,7 +1084,7 @@ mod index_entry {
         ///
         /// This must be a valid version requirement without an operator (e.g. no `=`)
         #[serde(skip_serializing_if = "Option::is_none")]
-        pub rust_version: Option<String>,
+        pub rust_version: Option<RustVersion>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -1097,7 +1100,7 @@ mod index_entry {
         ///
         /// This must be a valid version requirement defined at
         /// https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html.
-        pub req: String,
+        pub req: VersionReq,
 
         /// Features enabled for this dependency.
         pub features: Vec<String>,
@@ -1150,11 +1153,14 @@ mod index_entry {
 
 mod common {
     use ascii::{AsciiChar, AsciiStr, AsciiString};
+    use semver::Version;
     use serde::{de::Error, Deserialize, Serialize};
     use snafu::prelude::*;
     use std::{
+        borrow::Cow,
         ops,
         path::{Path, PathBuf},
+        str::FromStr,
     };
 
     /// Contains only alphanumeric, `-`, or `_` characters.
@@ -1269,6 +1275,71 @@ mod common {
 
     fn valid_crate_name_char(chr: AsciiChar) -> bool {
         chr.is_alphanumeric() || chr == AsciiChar::UnderScore || chr == AsciiChar::Minus
+    }
+
+    #[derive(Debug)]
+    pub struct RustVersion(Version);
+
+    impl FromStr for RustVersion {
+        type Err = RustVersionError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            use rust_version_error::*;
+
+            let v: Version = match s.parse() {
+                Ok(v) => v,
+                Err(e) => {
+                    let version = [s, ".0"].concat();
+                    match version.parse() {
+                        Ok(v) => v,
+                        Err(_) => return Err(e)?,
+                    }
+                }
+            };
+
+            ensure!(v.pre.is_empty(), PrereleaseSnafu);
+            ensure!(v.build.is_empty(), BuildSnafu);
+
+            Ok(Self(v))
+        }
+    }
+
+    #[derive(Debug, Snafu)]
+    #[snafu(module)]
+    pub enum RustVersionError {
+        #[snafu(transparent)]
+        Semver { source: semver::Error },
+
+        #[snafu(display("May not specify a prerelease version"))]
+        Prerelease,
+
+        #[snafu(display("May not specify a version with build metadata"))]
+        Build,
+    }
+
+    impl From<RustVersion> for Version {
+        fn from(value: RustVersion) -> Self {
+            value.0
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for RustVersion {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let version = Cow::<str>::deserialize(deserializer)?;
+            version.parse().map_err(D::Error::custom)
+        }
+    }
+
+    impl serde::Serialize for RustVersion {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            self.0.serialize(serializer)
+        }
     }
 }
 
