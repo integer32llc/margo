@@ -184,8 +184,8 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
                                     }
                                     td {
                                         select class="w-full" name="version" {
-                                            @for v in v.keys() {
-                                                option { (v) }
+                                            @for (is_last, v) in tag_last(v.keys()) {
+                                                option selected[is_last] { (v) }
                                             }
                                         }
                                     }
@@ -204,4 +204,13 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
             }
         }
     }
+}
+
+fn tag_last<I>(i: I) -> impl Iterator<Item = (bool, I::Item)>
+where
+    I: DoubleEndedIterator,
+{
+    let mut i = i.fuse();
+    let last = i.next_back().map(|v| (true, v));
+    i.map(|v| (false, v)).chain(last)
 }

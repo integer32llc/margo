@@ -35,6 +35,27 @@ RSpec.describe 'The crate list', type: :feature do
     end
   end
 
+  it 'selects the later version' do
+    name = 'awesome'
+    versions = %w[2.0.0 3.0.0 1.0.0]
+
+    versions.each do |version|
+      scratch
+        .crate(name:, version:)
+        .lib_rs(%(pub const ID: &str = "#{version}";))
+        .publish_to(registry)
+    end
+
+    visit registry.url
+
+    aggregate_failures do
+      within(:section, 'Available crates') do
+        expect(page).to have_content(name)
+        expect(page).to have_select('version', with_options: ['1.0.0', '2.0.0', '3.0.0'], selected: '3.0.0')
+      end
+    end
+  end
+
   Capybara.add_selector(:section) do
     xpath { |title| ".//section[h1[contains(., '#{title}')]]" }
   end
