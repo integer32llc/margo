@@ -118,3 +118,18 @@ A number of tools are checked in CI.
 ```
 
 [prettier]: https://prettier.io
+
+# Releasing
+
+While assets are not usually checked in to the repository, they _are_
+temporarily checked in during a release so that they are part of the
+release package and can be tracked in history.
+
+To create the proper sequence of commits and tags, you can prepare a
+release locally:
+
+```
+cargo xtask prepare-release 0.0.0
+```
+
+The commits and tag must be pushed manually afterwards.
