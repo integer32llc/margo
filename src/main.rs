@@ -271,6 +271,7 @@ impl Registry {
     fn initialize(config: ConfigV1, path: impl Into<PathBuf>) -> Result<Self, InitializeError> {
         use initialize_error::*;
 
+        let config = config.normalize();
         let path = path.into();
 
         println!("Initializing registry in `{}`", path.display());
@@ -290,19 +291,22 @@ impl Registry {
             "{base_url}crates/{{lowerprefix}}/{{crate}}/{{version}}.crate",
             base_url = config.base_url,
         );
+        let auth_required = config.auth_required;
 
-        let config_json_path = path.join("config.json");
+        let this = Self { path, config };
+
+        let config_json_path = this.config_json_path();
         let config_json = config_json::Root {
             dl,
             api: None,
-            auth_required: config.auth_required,
+            auth_required,
         };
         let config_json = serde_json::to_string(&config_json).context(ConfigJsonSerializeSnafu)?;
         fs::write(&config_json_path, config_json).context(ConfigJsonWriteSnafu {
             path: &config_json_path,
         })?;
 
-        Ok(Self { path, config })
+        Ok(this)
     }
 
     fn open(path: impl Into<PathBuf>) -> Result<Self, OpenError> {
@@ -483,6 +487,15 @@ impl Registry {
 
     fn crate_dir(&self) -> PathBuf {
         self.path.join(CRATE_DIR_NAME)
+    }
+
+    #[cfg(test)]
+    fn margo_config_toml_path(&self) -> PathBuf {
+        self.path.join(CONFIG_FILE_NAME)
+    }
+
+    fn config_json_path(&self) -> PathBuf {
+        self.path.join("config.json")
     }
 
     fn index_file_path_for(&self, name: &CrateName) -> PathBuf {
@@ -936,6 +949,18 @@ struct ConfigV1 {
 
 impl ConfigV1 {
     const USER_DEFAULT_AUTH_REQUIRED: bool = false;
+
+    fn normalize(mut self) -> ConfigV1 {
+        ensure_last_segment_empty(&mut self.base_url);
+
+        self
+    }
+}
+
+fn ensure_last_segment_empty(url: &mut Url) {
+    if let Ok(mut s) = url.path_segments_mut() {
+        s.pop_if_empty().push("");
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -1252,19 +1277,23 @@ mod test {
     use super::*;
     use registry_conformance::{Crate, ScratchSpace};
 
-    #[tokio::test]
-    async fn adding_duplicate_crate() {
-        let global = Global::new().unwrap();
-        let scratch = ScratchSpace::new().await.unwrap();
-
-        let config = ConfigV1 {
+    fn default_config() -> ConfigV1 {
+        ConfigV1 {
             base_url: "http://example.com".parse().unwrap(),
             auth_required: false,
             html: ConfigV1Html {
                 enabled: false,
                 suggested_registry_name: None,
             },
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn adding_duplicate_crate() {
+        let global = Global::new().unwrap();
+        let scratch = ScratchSpace::new().await.unwrap();
+
+        let config = default_config();
 
         let r = Registry::initialize(config, scratch.registry()).unwrap();
 
@@ -1283,5 +1312,29 @@ mod test {
         let index_contents = fs::read_to_string(index_file_path).unwrap();
 
         assert_eq!(1, index_contents.lines().count());
+    }
+
+    #[tokio::test]
+    async fn base_url_requires_trailing_slash() {
+        let scratch = ScratchSpace::new().await.unwrap();
+
+        let config = ConfigV1 {
+            base_url: "http://example.com/path/to/index".parse().unwrap(),
+            ..default_config()
+        };
+
+        let r = Registry::initialize(config, scratch.registry()).unwrap();
+
+        let paths = [r.config_json_path(), r.margo_config_toml_path()];
+
+        for path in paths {
+            let contents = fs::read_to_string(&path).unwrap();
+
+            assert!(
+                contents.contains("/path/to/index/"),
+                "{path} does not have the trailing slash:\n{contents}",
+                path = path.display(),
+            );
+        }
     }
 }
