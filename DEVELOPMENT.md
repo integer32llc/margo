@@ -34,6 +34,17 @@ Once this is running in one window, a normal build via Cargo will suffice:
 
 # Tests
 
+## Unit
+
+This ensures internal invariants of the registry. It drives Margo as a
+library.
+
+These tests are written in Rust and live in the `margo` binary. To run them:
+
+```
+% cargo test
+```
+
 ## Registry conformance
 
 This ensures that the files created by Margo function as a valid Cargo
@@ -107,3 +118,18 @@ A number of tools are checked in CI.
 ```
 
 [prettier]: https://prettier.io
+
+# Releasing
+
+While assets are not usually checked in to the repository, they _are_
+temporarily checked in during a release so that they are part of the
+release package and can be tracked in history.
+
+To create the proper sequence of commits and tags, you can prepare a
+release locally:
+
+```
+cargo xtask prepare-release 0.0.0
+```
+
+The commits and tag must be pushed manually afterwards.

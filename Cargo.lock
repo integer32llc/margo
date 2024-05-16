@@ -1608,4 +1608,5 @@ dependencies = [
  "quote",
  "regex",
  "snafu",
+ "toml_edit",
 ]

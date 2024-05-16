@@ -13,3 +13,4 @@ notify = { version = "6.1.1", default-features = false, features = ["macos_fseve
 quote = { version = "1.0.36", default-features = false }
 regex = { version = "1.10.4", default-features = false, features = ["std"] }
 snafu.workspace = true
+toml_edit = { version = "0.22.12", default-features = false, features = ["display", "parse"] }

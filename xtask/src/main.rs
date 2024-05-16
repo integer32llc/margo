@@ -10,6 +10,7 @@ use std::{
     thread,
     time::Duration,
 };
+use toml_edit::{DocumentMut, Item};
 
 /// Build tools for Margo
 #[derive(Debug, argh::FromArgs)]
@@ -22,6 +23,7 @@ struct Args {
 #[argh(subcommand)]
 enum Subcommand {
     Assets(AssetsArgs),
+    PrepareRelease(PrepareReleaseArgs),
 }
 
 /// Manage assets
@@ -34,12 +36,22 @@ struct AssetsArgs {
     watch: bool,
 }
 
+/// Prepare a release
+#[derive(Debug, argh::FromArgs)]
+#[argh(subcommand)]
+#[argh(name = "prepare-release")]
+struct PrepareReleaseArgs {
+    #[argh(positional)]
+    tag: String,
+}
+
 #[snafu::report]
 fn main() -> Result<(), Error> {
     let args: Args = argh::from_env();
 
     match args.subcommand {
         Subcommand::Assets(args) => do_assets(args)?,
+        Subcommand::PrepareRelease(args) => do_prepare_release(args)?,
     }
 
     Ok(())
@@ -49,6 +61,9 @@ fn main() -> Result<(), Error> {
 enum Error {
     #[snafu(transparent)]
     Assets { source: AssetsError },
+
+    #[snafu(transparent)]
+    PrepareRelease { source: PrepareReleaseError },
 }
 
 fn do_assets(args: AssetsArgs) -> Result<(), AssetsError> {
@@ -61,7 +76,7 @@ fn do_assets(args: AssetsArgs) -> Result<(), AssetsError> {
     let asset_root = join!(&root, "ui", "dist");
     let asset_index = join!(&asset_root, "ui.html");
 
-    pnpm("install")?;
+    pnpm!("install")?;
 
     if args.watch {
         do_assets_watch(root, asset_root, asset_index)?;
@@ -119,7 +134,7 @@ fn do_assets_watch(
         }
     });
 
-    pnpm("watch")?;
+    pnpm!("watch")?;
 
     Ok(())
 }
@@ -184,7 +199,7 @@ fn do_assets_once(
     asset_root: PathBuf,
     asset_index: PathBuf,
 ) -> Result<(), AssetsOnceError> {
-    pnpm("build")?;
+    pnpm!("build")?;
     rebuild_asset_file(&root, &asset_root, &asset_index)?;
 
     Ok(())
@@ -305,27 +320,6 @@ enum ExtractAssetError {
     ReadAssetMap { source: io::Error, path: PathBuf },
 }
 
-fn pnpm(subcommand: &str) -> Result<(), PnpmError> {
-    use pnpm_error::*;
-
-    let status = Command::new("pnpm")
-        .arg(subcommand)
-        .status()
-        .context(SpawnSnafu)?;
-    ensure!(status.success(), SuccessSnafu);
-    Ok(())
-}
-
-#[derive(Debug, Snafu)]
-#[snafu(module)]
-enum PnpmError {
-    #[snafu(display("Could not start the `pnpm` process"))]
-    Spawn { source: io::Error },
-
-    #[snafu(display("The `pnpm` process did not succeed"))]
-    Success,
-}
-
 macro_rules! join {
     ($base:expr, $($c:expr),+ $(,)?) => {{
         let mut base = PathBuf::from($base);
@@ -336,3 +330,179 @@ macro_rules! join {
     }};
 }
 use join;
+
+fn do_prepare_release(args: PrepareReleaseArgs) -> Result<(), PrepareReleaseError> {
+    use prepare_release_error::*;
+
+    let PrepareReleaseArgs { tag } = args;
+
+    do_assets(AssetsArgs { watch: false })?;
+
+    const ASSET_FILE: &str = "src/html/assets.rs";
+    const CARGO_TOML_FILE: &str = "Cargo.toml";
+    const CARGO_LOCK_FILE: &str = "Cargo.lock";
+
+    let add_msg = format!("Commit assets for release {tag}");
+    let update_msg = format!("Release {tag}");
+    let rm_msg = format!("Remove assets for release {tag}");
+
+    git!("add", "--force", ASSET_FILE).context(AssetAddSnafu)?;
+    git!("commit", "--message", add_msg).context(AssetAddCommitSnafu)?;
+
+    set_version(CARGO_TOML_FILE, &tag)?;
+    cargo!("update", "margo").context(VersionLockUpdateSnafu)?;
+    git!("add", CARGO_TOML_FILE, CARGO_LOCK_FILE).context(VersionAddSnafu)?;
+    git!("commit", "--message", update_msg).context(VersionCommitSnafu)?;
+    git!("tag", tag).context(VersionTagSnafu)?;
+
+    git!("rm", ASSET_FILE).context(AssetRmSnafu)?;
+    git!("commit", "--message", rm_msg).context(AssetRmCommitSnafu)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum PrepareReleaseError {
+    #[snafu(transparent)]
+    AssetBuild { source: AssetsError },
+
+    #[snafu(display("Could not add the asset file to git"))]
+    AssetAdd { source: GitError },
+
+    #[snafu(display("Could not commit the asset file addition to git"))]
+    AssetAddCommit { source: GitError },
+
+    #[snafu(transparent)]
+    VersionSet { source: SetVersionError },
+
+    #[snafu(display("Could not update Cargo.lock"))]
+    VersionLockUpdate { source: CargoError },
+
+    #[snafu(display("Could not add Cargo.toml and Cargo.lock to git"))]
+    VersionAdd { source: GitError },
+
+    #[snafu(display("Could not commit Cargo.toml and Cargo.lock to git"))]
+    VersionCommit { source: GitError },
+
+    #[snafu(display("Could not tag the release commit in git"))]
+    VersionTag { source: GitError },
+
+    #[snafu(display("Could not remove the asset file from git"))]
+    AssetRm { source: GitError },
+
+    #[snafu(display("Could not commit the asset file removal to git"))]
+    AssetRmCommit { source: GitError },
+}
+
+fn set_version(fname: impl AsRef<Path>, version: &str) -> Result<(), SetVersionError> {
+    use set_version_error::*;
+
+    let fname = fname.as_ref();
+
+    let cargo_toml = fs::read_to_string(fname).context(ReadSnafu)?;
+    let mut cargo_toml: DocumentMut = cargo_toml.parse().context(ParseSnafu)?;
+
+    *cargo_toml
+        .get_mut("package")
+        .context(PackageSnafu)?
+        .get_mut("version")
+        .context(VersionSnafu)? = Item::Value(version.into());
+
+    let cargo_toml = cargo_toml.to_string();
+    fs::write(fname, cargo_toml).context(WriteSnafu)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum SetVersionError {
+    #[snafu(display("Could not read the file"))]
+    Read { source: io::Error },
+
+    #[snafu(display("Could not parse the file"))]
+    Parse { source: toml_edit::TomlError },
+
+    #[snafu(display("The file did not contain a package table"))]
+    Package,
+
+    #[snafu(display("The file did not contain a version field"))]
+    Version,
+
+    #[snafu(display("Could not write the file"))]
+    Write { source: io::Error },
+}
+
+macro_rules! pnpm {
+    ($cmd:expr $(, $arg:expr)* $(,)?) => {
+        command!("pnpm", $cmd $(, $arg)*).map_err(PnpmError::from)
+    };
+}
+use pnpm;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Executing `pnpm` failed"))]
+#[snafu(context(false))]
+struct PnpmError {
+    source: ProcessError,
+}
+
+macro_rules! git {
+    ($cmd:expr $(, $arg:expr)* $(,)?) => {
+        command!("git", $cmd $(, $arg)*).map_err(GitError::from)
+    };
+}
+use git;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Executing `git` failed"))]
+#[snafu(context(false))]
+struct GitError {
+    source: ProcessError,
+}
+
+macro_rules! cargo {
+    ($cmd:expr $(, $arg:expr)* $(,)?) => {
+        command!("cargo", $cmd $(, $arg)*).map_err(CargoError::from)
+    };
+}
+use cargo;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Executing `cargo` failed"))]
+#[snafu(context(false))]
+struct CargoError {
+    source: ProcessError,
+}
+
+macro_rules! command {
+    ($cmd:expr $(, $arg:expr)* $(,)?) => {
+        (|| -> Result<(), ProcessError> {
+            use process_error::*;
+
+            let mut cmd = Command::new($cmd);
+            $(
+                cmd.arg($arg);
+            )*
+
+            let status = cmd.status()
+               .context(SpawnSnafu)?;
+
+            ensure!(status.success(), SuccessSnafu);
+
+            Ok(())
+        })()
+    };
+}
+use command;
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum ProcessError {
+    #[snafu(display("Could not start the process"))]
+    Spawn { source: io::Error },
+
+    #[snafu(display("The process did not succeed"))]
+    Success,
+}
