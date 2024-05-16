@@ -27,6 +27,7 @@ enum Subcommand {
     Init(InitArgs),
     Add(AddArgs),
     GenerateHtml(GenerateHtmlArgs),
+    Yank(YankArgs),
 }
 
 /// Initialize a new registry
@@ -81,6 +82,24 @@ struct GenerateHtmlArgs {
     registry: PathBuf,
 }
 
+/// Yank a version of a crate from the registry
+#[derive(Debug, argh::FromArgs)]
+#[argh(subcommand)]
+#[argh(name = "yank")]
+struct YankArgs {
+    /// path to the registry to modify
+    #[argh(option)]
+    registry: PathBuf,
+
+    /// the version of the crate
+    #[argh(option)]
+    version: Version,
+
+    /// the name of the crate
+    #[argh(positional)]
+    name: CrateName,
+}
+
 #[snafu::report]
 fn main() -> Result<(), Error> {
     let args: Args = argh::from_env();
@@ -92,6 +111,7 @@ fn main() -> Result<(), Error> {
         Subcommand::Init(init) => do_init(global, init)?,
         Subcommand::Add(add) => do_add(global, add)?,
         Subcommand::GenerateHtml(html) => do_generate_html(global, html)?,
+        Subcommand::Yank(yank) => do_yank(global, yank)?,
     }
 
     Ok(())
@@ -114,6 +134,9 @@ enum Error {
 
     #[snafu(transparent)]
     Html { source: HtmlError },
+
+    #[snafu(transparent)]
+    Yank { source: YankError },
 }
 
 trait UnwrapOrDialog<T> {
@@ -259,6 +282,12 @@ fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Erro
     Ok(())
 }
 
+fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
+    let r = Registry::open(yank.registry)?;
+    r.yank(yank.name, yank.version)?;
+    Ok(())
+}
+
 #[derive(Debug)]
 struct Registry {
     path: PathBuf,
@@ -354,7 +383,7 @@ impl Registry {
             fs::create_dir_all(path).context(CrateDirSnafu { path })?;
         }
 
-        // FUTURE: Add `yank` subcommand
+        // FUTURE: Add `unyank` subcommand
         // FUTURE: Add `remove` subcommand
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)
 
@@ -384,6 +413,20 @@ impl Registry {
     #[cfg(not(feature = "html"))]
     fn generate_html(&self) -> Result<(), HtmlError> {
         Err(HtmlError)
+    }
+
+    fn yank(&self, name: CrateName, version: Version) -> Result<(), YankError> {
+        use yank_error::*;
+
+        let path = self.index_file_path_for(&name);
+        let mut index = Self::parse_index_file(&path).context(IndexParseSnafu { path: &path })?;
+
+        let entry = index.get_mut(&version).context(VersionSnafu)?;
+        entry.yanked = true;
+
+        Self::write_index_file(index, &path).context(IndexWriteSnafu { path })?;
+
+        Ok(())
     }
 
     fn list_crate_files(
@@ -599,6 +642,25 @@ use html::Error as HtmlError;
 #[derive(Debug, Snafu)]
 #[snafu(display("Margo was not compiled with the HTML feature enabled. This binary will not be able to generate HTML files"))]
 struct HtmlError;
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum YankError {
+    #[snafu(display("Could not parse the crate's index file {}", path.display()))]
+    IndexParse {
+        source: ParseIndexError,
+        path: PathBuf,
+    },
+
+    #[snafu(display("The version does not exist in the index"))]
+    Version,
+
+    #[snafu(display("Could not write the crate's index file {}", path.display()))]
+    IndexWrite {
+        source: WriteIndexError,
+        path: PathBuf,
+    },
+}
 
 #[derive(Debug, Snafu)]
 #[snafu(module)]

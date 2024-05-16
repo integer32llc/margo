@@ -185,6 +185,22 @@ impl Margo {
         Ok(())
     }
 
+    async fn yank_crate_(&mut self, crate_: &CreatedCrate) -> Result<(), YankError> {
+        use yank_error::*;
+
+        self.command()
+            .arg("yank")
+            .arg("--registry")
+            .arg(&self.directory)
+            .arg(crate_.name())
+            .args(["--version", crate_.version()])
+            .expect_success()
+            .await
+            .context(ExecutionSnafu)?;
+
+        Ok(())
+    }
+
     async fn shutdown_(self) -> Result<(), ShutdownError> {
         use shutdown_error::*;
 
@@ -215,6 +231,15 @@ impl Margo {
 #[snafu(module)]
 pub enum BuildError {
     #[snafu(display("Could not build the registry"))]
+    Execution {
+        source: registry_conformance::CommandError,
+    },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+pub enum YankError {
+    #[snafu(display("Could not yank the crate from the registry"))]
     Execution {
         source: registry_conformance::CommandError,
     },
@@ -269,6 +294,10 @@ impl Registry for Margo {
         Ok(self.publish_crate_(crate_).await?)
     }
 
+    async fn yank_crate(&mut self, crate_: &CreatedCrate) -> Result<(), Error> {
+        Ok(self.yank_crate_(crate_).await?)
+    }
+
     async fn shutdown(self) -> Result<(), Error> {
         Ok(self.shutdown_().await?)
     }
@@ -282,6 +311,9 @@ pub enum Error {
 
     #[snafu(transparent)]
     Publish { source: PublishError },
+
+    #[snafu(transparent)]
+    Yank { source: YankError },
 
     #[snafu(transparent)]
     Shutdown { source: ShutdownError },
