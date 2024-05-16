@@ -387,13 +387,10 @@ impl Registry {
         // FUTURE: Add `remove` subcommand
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)
 
-        let mut index_file =
-            Self::parse_index_file(&index_path).context(IndexParseSnafu { path: &index_path })?;
-
-        index_file.insert(index_entry.vers.clone(), index_entry);
-
-        Self::write_index_file(index_file, &index_path)
-            .context(IndexWriteSnafu { path: &index_path })?;
+        self.read_modify_write(&index_entry.name.clone(), |index_file| {
+            index_file.insert(index_entry.vers.clone(), index_entry);
+            Ok::<_, AddError>(())
+        })?;
 
         println!("Wrote crate index to `{}`", index_path.display());
 
@@ -418,15 +415,31 @@ impl Registry {
     fn yank(&self, name: CrateName, version: Version) -> Result<(), YankError> {
         use yank_error::*;
 
-        let path = self.index_file_path_for(&name);
+        self.read_modify_write(&name, |index| {
+            let entry = index.get_mut(&version).context(VersionSnafu)?;
+            entry.yanked = true;
+            Ok(())
+        })
+    }
+
+    fn read_modify_write<T, E>(
+        &self,
+        name: &CrateName,
+        modify: impl FnOnce(&mut Index) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<ReadModifyWriteError>,
+    {
+        use read_modify_write_error::*;
+
+        let path = self.index_file_path_for(name);
         let mut index = Self::parse_index_file(&path).context(IndexParseSnafu { path: &path })?;
 
-        let entry = index.get_mut(&version).context(VersionSnafu)?;
-        entry.yanked = true;
+        let val = modify(&mut index)?;
 
         Self::write_index_file(index, &path).context(IndexWriteSnafu { path })?;
 
-        Ok(())
+        Ok(val)
     }
 
     fn list_crate_files(
@@ -616,17 +629,8 @@ enum AddError {
     #[snafu(display("Could not create the crate's index directory {}", path.display()))]
     IndexDir { source: io::Error, path: PathBuf },
 
-    #[snafu(display("Could not parse the crate's index file {}", path.display()))]
-    IndexParse {
-        source: ParseIndexError,
-        path: PathBuf,
-    },
-
-    #[snafu(display("Could not write the crate's index file {}", path.display()))]
-    IndexWrite {
-        source: WriteIndexError,
-        path: PathBuf,
-    },
+    #[snafu(transparent)]
+    IndexModify { source: ReadModifyWriteError },
 
     #[snafu(display("Could not create the crate directory {}", path.display()))]
     CrateDir { source: io::Error, path: PathBuf },
@@ -646,14 +650,21 @@ struct HtmlError;
 #[derive(Debug, Snafu)]
 #[snafu(module)]
 enum YankError {
+    #[snafu(display("The version does not exist in the index"))]
+    Version,
+
+    #[snafu(transparent)]
+    Modify { source: ReadModifyWriteError },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum ReadModifyWriteError {
     #[snafu(display("Could not parse the crate's index file {}", path.display()))]
     IndexParse {
         source: ParseIndexError,
         path: PathBuf,
     },
-
-    #[snafu(display("The version does not exist in the index"))]
-    Version,
 
     #[snafu(display("Could not write the crate's index file {}", path.display()))]
     IndexWrite {
