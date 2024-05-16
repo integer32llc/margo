@@ -34,6 +34,17 @@ Once this is running in one window, a normal build via Cargo will suffice:
 
 # Tests
 
+## Unit
+
+This ensures internal invariants of the registry. It drives Margo as a
+library.
+
+These tests are written in Rust and live in the `margo` binary. To run them:
+
+```
+% cargo test
+```
+
 ## Registry conformance
 
 This ensures that the files created by Margo function as a valid Cargo
