@@ -1198,6 +1198,14 @@ mod common {
         }
     }
 
+    impl FromStr for CrateName {
+        type Err = CrateNameError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            s.try_into()
+        }
+    }
+
     impl TryFrom<&str> for CrateName {
         type Error = CrateNameError;
 
