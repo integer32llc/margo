@@ -953,9 +953,9 @@ checksum = "adad44e29e4c806119491a7f06f03de4d1af22c3a680dd47f1e6e179439d1f56"
 
 [[package]]
 name = "registry-conformance"
-version = "0.3.0"
+version = "0.4.0"
 source = "sparse+https://integer32llc.github.io/registry-conformance/"
-checksum = "1616afb1bbc576b6aa79fc318f8b0604340945be5765de85954fa52532b4d38e"
+checksum = "d32618611649b0df9be05d325c0ddfa5fb7e088a5e50662a4b7a3722da73f1c7"
 dependencies = [
  "base64",
  "futures",

@@ -91,6 +91,10 @@ struct YankArgs {
     #[argh(option)]
     registry: PathBuf,
 
+    /// undo a previous yank
+    #[argh(switch)]
+    undo: bool,
+
     /// the version of the crate
     #[argh(option)]
     version: Version,
@@ -284,7 +288,7 @@ fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Erro
 
 fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
     let r = Registry::open(yank.registry)?;
-    r.yank(yank.name, yank.version)?;
+    r.yank(yank.name, yank.version, !yank.undo)?;
     Ok(())
 }
 
@@ -383,7 +387,6 @@ impl Registry {
             fs::create_dir_all(path).context(CrateDirSnafu { path })?;
         }
 
-        // FUTURE: Add `unyank` subcommand
         // FUTURE: Add `remove` subcommand
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)
 
@@ -412,12 +415,12 @@ impl Registry {
         Err(HtmlError)
     }
 
-    fn yank(&self, name: CrateName, version: Version) -> Result<(), YankError> {
+    fn yank(&self, name: CrateName, version: Version, yanked: bool) -> Result<(), YankError> {
         use yank_error::*;
 
         self.read_modify_write(&name, |index| {
             let entry = index.get_mut(&version).context(VersionSnafu)?;
-            entry.yanked = true;
+            entry.yanked = yanked;
             Ok(())
         })
     }

@@ -185,18 +185,21 @@ impl Margo {
         Ok(())
     }
 
-    async fn yank_crate_(&mut self, crate_: &CreatedCrate) -> Result<(), YankError> {
+    async fn yank_crate_(&mut self, crate_: &CreatedCrate, yanked: bool) -> Result<(), YankError> {
         use yank_error::*;
 
-        self.command()
-            .arg("yank")
+        let mut cmd = self.command();
+        cmd.arg("yank")
             .arg("--registry")
             .arg(&self.directory)
             .arg(crate_.name())
-            .args(["--version", crate_.version()])
-            .expect_success()
-            .await
-            .context(ExecutionSnafu)?;
+            .args(["--version", crate_.version()]);
+
+        if !yanked {
+            cmd.arg("--undo");
+        }
+
+        cmd.expect_success().await.context(ExecutionSnafu)?;
 
         Ok(())
     }
@@ -295,7 +298,11 @@ impl Registry for Margo {
     }
 
     async fn yank_crate(&mut self, crate_: &CreatedCrate) -> Result<(), Error> {
-        Ok(self.yank_crate_(crate_).await?)
+        Ok(self.yank_crate_(crate_, true).await?)
+    }
+
+    async fn unyank_crate(&mut self, crate_: &CreatedCrate) -> Result<(), Error> {
+        Ok(self.yank_crate_(crate_, false).await?)
     }
 
     async fn shutdown(self) -> Result<(), Error> {
