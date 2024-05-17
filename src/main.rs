@@ -26,6 +26,7 @@ struct Args {
 enum Subcommand {
     Init(InitArgs),
     Add(AddArgs),
+    Remove(RemoveArgs),
     GenerateHtml(GenerateHtmlArgs),
     Yank(YankArgs),
 }
@@ -72,6 +73,24 @@ struct AddArgs {
     path: PathBuf,
 }
 
+/// Remove a crate from the registry
+#[derive(Debug, argh::FromArgs)]
+#[argh(subcommand)]
+#[argh(name = "rm")]
+struct RemoveArgs {
+    /// path to the registry to modify
+    #[argh(option)]
+    registry: PathBuf,
+
+    // FUTURE: Allow removing all versions at once?
+    /// the version of the crate
+    #[argh(option)]
+    version: Version,
+
+    #[argh(positional)]
+    name: CrateName,
+}
+
 /// Generate an HTML index for the registry
 #[derive(Debug, argh::FromArgs)]
 #[argh(subcommand)]
@@ -114,6 +133,7 @@ fn main() -> Result<(), Error> {
     match args.subcommand {
         Subcommand::Init(init) => do_init(global, init)?,
         Subcommand::Add(add) => do_add(global, add)?,
+        Subcommand::Remove(rm) => do_remove(global, rm)?,
         Subcommand::GenerateHtml(html) => do_generate_html(global, html)?,
         Subcommand::Yank(yank) => do_yank(global, yank)?,
     }
@@ -135,6 +155,9 @@ enum Error {
 
     #[snafu(transparent)]
     Add { source: AddError },
+
+    #[snafu(transparent)]
+    Remove { source: RemoveError },
 
     #[snafu(transparent)]
     Html { source: HtmlError },
@@ -278,6 +301,15 @@ fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
     Ok(())
 }
 
+fn do_remove(_global: &Global, rm: RemoveArgs) -> Result<(), Error> {
+    let r = Registry::open(&rm.registry)?;
+
+    r.remove(rm.name, rm.version)?;
+    r.maybe_generate_html()?;
+
+    Ok(())
+}
+
 fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Error> {
     let r = Registry::open(html.registry)?;
     r.generate_html()?;
@@ -388,8 +420,8 @@ impl Registry {
             fs::create_dir_all(path).context(CrateDirSnafu { path })?;
         }
 
-        // FUTURE: Add `remove` subcommand
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)
+        // FUTURE: "transactional" adding of multiple crates
 
         self.read_modify_write(&index_entry.name.clone(), |index_file| {
             index_file.insert(index_entry.vers.clone(), index_entry);
@@ -404,6 +436,22 @@ impl Registry {
         println!("Wrote crate to `{}`", crate_file_path.display());
 
         Ok(())
+    }
+
+    fn remove(&self, name: CrateName, version: Version) -> Result<(), RemoveError> {
+        use remove_error::*;
+
+        self.read_modify_write(&name, |index| {
+            index.remove(&version);
+            Ok::<_, RemoveError>(())
+        })?;
+
+        let crate_file = self.crate_file_path_for(&name, &version);
+        match fs::remove_file(&crate_file) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e).context(DeleteSnafu { path: crate_file }),
+        }
     }
 
     #[cfg(feature = "html")]
@@ -649,6 +697,16 @@ enum AddError {
 
     #[snafu(display("Could not write the crate {}", path.display()))]
     CrateWrite { source: io::Error, path: PathBuf },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum RemoveError {
+    #[snafu(transparent)]
+    IndexModify { source: ReadModifyWriteError },
+
+    #[snafu(display("Could not delete the crate file {}", path.display()))]
+    Delete { source: io::Error, path: PathBuf },
 }
 
 #[cfg(feature = "html")]
@@ -1500,5 +1558,45 @@ mod test {
                 path = path.display(),
             );
         }
+    }
+
+    #[tokio::test]
+    async fn removing_a_crate_deletes_from_disk() {
+        let global = Global::new().unwrap();
+        let scratch = ScratchSpace::new().await.unwrap();
+
+        let config = default_config();
+
+        let r = Registry::initialize(config, scratch.registry()).unwrap();
+
+        let name = "to-go-away";
+        let version = "1.0.0";
+
+        let c = Crate::new(name, version)
+            .lib_rs(r#"pub const ID: u8 = 1;"#)
+            .create_in(&scratch)
+            .await
+            .unwrap();
+        let p = c.package().await.unwrap();
+
+        let name = name.parse().unwrap();
+        let version = version.parse().unwrap();
+        let crate_path = r.crate_file_path_for(&name, &version);
+
+        r.add(&global, p).unwrap();
+
+        assert!(
+            crate_path.exists(),
+            "The crate file should be in the registry at {}",
+            crate_path.display(),
+        );
+
+        r.remove(name, version).unwrap();
+
+        assert!(
+            !crate_path.exists(),
+            "The crate file should not be in the registry at {}",
+            crate_path.display(),
+        );
     }
 }

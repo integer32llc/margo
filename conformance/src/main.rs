@@ -185,6 +185,22 @@ impl Margo {
         Ok(())
     }
 
+    async fn remove_crate_(&mut self, crate_: &CreatedCrate) -> Result<(), RemoveError> {
+        use remove_error::*;
+
+        self.command()
+            .arg("rm")
+            .arg("--registry")
+            .arg(&self.directory)
+            .arg(crate_.name())
+            .args(["--version", crate_.version()])
+            .expect_success()
+            .await
+            .context(ExecutionSnafu)?;
+
+        Ok(())
+    }
+
     async fn yank_crate_(&mut self, crate_: &CreatedCrate, yanked: bool) -> Result<(), YankError> {
         use yank_error::*;
 
@@ -264,6 +280,15 @@ pub enum PublishError {
 
 #[derive(Debug, Snafu)]
 #[snafu(module)]
+pub enum RemoveError {
+    #[snafu(display("Could not remove the crate from the registry"))]
+    Execution {
+        source: registry_conformance::CommandError,
+    },
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
 pub enum ShutdownError {
     #[snafu(display("The webserver task panicked"))]
     Join { source: tokio::task::JoinError },
@@ -297,6 +322,10 @@ impl Registry for Margo {
         Ok(self.publish_crate_(crate_).await?)
     }
 
+    async fn remove_crate(&mut self, crate_: &CreatedCrate) -> Result<(), Error> {
+        Ok(self.remove_crate_(crate_).await?)
+    }
+
     async fn yank_crate(&mut self, crate_: &CreatedCrate) -> Result<(), Error> {
         Ok(self.yank_crate_(crate_, true).await?)
     }
@@ -318,6 +347,9 @@ pub enum Error {
 
     #[snafu(transparent)]
     Publish { source: PublishError },
+
+    #[snafu(transparent)]
+    Remove { source: RemoveError },
 
     #[snafu(transparent)]
     Yank { source: YankError },
