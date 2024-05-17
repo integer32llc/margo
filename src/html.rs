@@ -1,9 +1,10 @@
 use indoc::formatdoc;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
+use semver::Version;
 use snafu::prelude::*;
 use std::{fs, io, path::PathBuf};
 
-use crate::{ConfigV1, ListAll, Registry};
+use crate::{index_entry, ConfigV1, Index, ListAll, Registry};
 
 #[rustfmt::skip]
 mod assets;
@@ -184,8 +185,9 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
                                     }
                                     td {
                                         select class="w-full" name="version" {
-                                            @for (is_last, v) in tag_last(v.keys()) {
-                                                option selected[is_last] { (v) }
+                                            @for (v, c, select) in most_interesting(v) {
+                                                @let suffix = if c.yanked { " (yanked)" } else { "" };
+                                                option selected[select] { (v) (suffix) }
                                             }
                                         }
                                     }
@@ -206,11 +208,9 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
     }
 }
 
-fn tag_last<I>(i: I) -> impl Iterator<Item = (bool, I::Item)>
-where
-    I: DoubleEndedIterator,
-{
-    let mut i = i.fuse();
-    let last = i.next_back().map(|v| (true, v));
-    i.map(|v| (false, v)).chain(last)
+fn most_interesting(i: &Index) -> impl Iterator<Item = (&Version, &index_entry::Root, bool)> {
+    let last_non_yanked = i.iter().rfind(|(_, c)| !c.yanked).map(|(v, _)| v);
+
+    i.iter()
+        .map(move |(v, c)| (v, c, Some(v) == last_non_yanked))
 }

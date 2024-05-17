@@ -271,11 +271,9 @@ enum DoInitializeError {
 
 fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
     let r = Registry::open(&add.registry)?;
-    r.add(global, &add.path)?;
 
-    if r.config.html.enabled {
-        r.generate_html()?;
-    }
+    r.add(global, &add.path)?;
+    r.maybe_generate_html()?;
 
     Ok(())
 }
@@ -288,7 +286,10 @@ fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Erro
 
 fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
     let r = Registry::open(yank.registry)?;
+
     r.yank(yank.name, yank.version, !yank.undo)?;
+    r.maybe_generate_html()?;
+
     Ok(())
 }
 
@@ -413,6 +414,14 @@ impl Registry {
     #[cfg(not(feature = "html"))]
     fn generate_html(&self) -> Result<(), HtmlError> {
         Err(HtmlError)
+    }
+
+    fn maybe_generate_html(&self) -> Result<(), HtmlError> {
+        if self.config.html.enabled {
+            self.generate_html()
+        } else {
+            Ok(())
+        }
     }
 
     fn yank(&self, name: CrateName, version: Version, yanked: bool) -> Result<(), YankError> {
