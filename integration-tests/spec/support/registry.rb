@@ -28,6 +28,20 @@ class Registry
     @server.stop
   end
 
+  def yank(name:, version:)
+    system(
+      MARGO_BINARY,
+      'yank',
+      '--registry',
+      @root.to_s,
+      name,
+      '--version',
+      version,
+      %i[out err] => File::NULL,
+      exception: true,
+    )
+  end
+
   def url
     @server.url
   end
