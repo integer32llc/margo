@@ -42,6 +42,17 @@ class Registry
     )
   end
 
+  def list
+    cmd = [
+      MARGO_BINARY,
+      'list',
+      '--registry',
+      @root.to_s,
+    ]
+
+    IO.popen(cmd, exception: true, &:read)
+  end
+
   def url
     @server.url
   end
