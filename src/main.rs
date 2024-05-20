@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt,
     fs::{self, File},
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
     path::{Component, Path, PathBuf},
@@ -27,8 +28,9 @@ enum Subcommand {
     Init(InitArgs),
     Add(AddArgs),
     Remove(RemoveArgs),
-    GenerateHtml(GenerateHtmlArgs),
     Yank(YankArgs),
+    List(ListArgs),
+    GenerateHtml(GenerateHtmlArgs),
 }
 
 /// Initialize a new registry
@@ -123,6 +125,16 @@ struct YankArgs {
     name: CrateName,
 }
 
+/// List all crates and their versions in the registry
+#[derive(Debug, argh::FromArgs)]
+#[argh(subcommand)]
+#[argh(name = "list")]
+struct ListArgs {
+    /// path to the registry to list
+    #[argh(option)]
+    registry: PathBuf,
+}
+
 #[snafu::report]
 fn main() -> Result<(), Error> {
     let args: Args = argh::from_env();
@@ -134,8 +146,9 @@ fn main() -> Result<(), Error> {
         Subcommand::Init(init) => do_init(global, init)?,
         Subcommand::Add(add) => do_add(global, add)?,
         Subcommand::Remove(rm) => do_remove(global, rm)?,
-        Subcommand::GenerateHtml(html) => do_generate_html(global, html)?,
         Subcommand::Yank(yank) => do_yank(global, yank)?,
+        Subcommand::List(list) => do_list(global, list)?,
+        Subcommand::GenerateHtml(html) => do_generate_html(global, html)?,
     }
 
     Ok(())
@@ -321,6 +334,52 @@ fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
 
     r.yank(yank.name, yank.version, !yank.undo)?;
     r.maybe_generate_html()?;
+
+    Ok(())
+}
+
+fn do_list(_global: &Global, list: ListArgs) -> Result<(), Error> {
+    let r = Registry::open(list.registry)?;
+
+    let crates = r.list_all().unwrap();
+
+    #[derive(Default)]
+    struct Max(usize, String);
+
+    impl Max {
+        fn push(&mut self, v: impl fmt::Display) {
+            use std::fmt::Write;
+
+            let Self(m, s) = self;
+
+            s.clear();
+            _ = write!(s, "{v}");
+            *m = usize::max(*m, s.len());
+        }
+
+        fn max(&self) -> usize {
+            self.0
+        }
+    }
+
+    let mut max_c = Max::default();
+    let mut max_v = Max::default();
+
+    for (crate_, versions) in &crates {
+        max_c.push(crate_);
+        for version in versions.keys() {
+            max_v.push(version);
+        }
+    }
+
+    let max_c = max_c.max();
+    let max_v = max_v.max();
+
+    for (crate_, versions) in crates {
+        for version in versions.keys() {
+            println!("{crate_:<max_c$} {version:<max_v$}");
+        }
+    }
 
     Ok(())
 }
@@ -1301,7 +1360,7 @@ mod common {
     use snafu::prelude::*;
     use std::{
         borrow::Cow,
-        ops,
+        fmt, ops,
         path::{Path, PathBuf},
         str::FromStr,
     };
@@ -1338,6 +1397,12 @@ mod common {
                     index_path.push(cd.as_str());
                 }
             };
+        }
+    }
+
+    impl fmt::Display for CrateName {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.fmt(f)
         }
     }
 

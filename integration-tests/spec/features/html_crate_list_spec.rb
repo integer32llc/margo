@@ -2,7 +2,7 @@
 
 require 'scratch_space'
 
-RSpec.describe 'The crate list', type: :feature do
+RSpec.describe 'The HTML crate list', type: :feature do
   let(:scratch) { ScratchSpace.new }
   let(:registry) { scratch.registry }
 
