@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt,
+    env, fmt,
     fs::{self, File},
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
     path::{Component, Path, PathBuf},
@@ -69,7 +69,7 @@ struct InitArgs {
 struct AddArgs {
     /// path to the registry to modify
     #[argh(option)]
-    registry: PathBuf,
+    registry: Option<PathBuf>,
 
     #[argh(positional)]
     path: PathBuf,
@@ -82,7 +82,7 @@ struct AddArgs {
 struct RemoveArgs {
     /// path to the registry to modify
     #[argh(option)]
-    registry: PathBuf,
+    registry: Option<PathBuf>,
 
     // FUTURE: Allow removing all versions at once?
     /// the version of the crate
@@ -100,7 +100,7 @@ struct RemoveArgs {
 struct GenerateHtmlArgs {
     /// path to the registry to modify
     #[argh(option)]
-    registry: PathBuf,
+    registry: Option<PathBuf>,
 }
 
 /// Yank a version of a crate from the registry
@@ -110,7 +110,7 @@ struct GenerateHtmlArgs {
 struct YankArgs {
     /// path to the registry to modify
     #[argh(option)]
-    registry: PathBuf,
+    registry: Option<PathBuf>,
 
     /// undo a previous yank
     #[argh(switch)]
@@ -132,7 +132,7 @@ struct YankArgs {
 struct ListArgs {
     /// path to the registry to list
     #[argh(option)]
-    registry: PathBuf,
+    registry: Option<PathBuf>,
 }
 
 #[snafu::report]
@@ -158,25 +158,46 @@ fn main() -> Result<(), Error> {
 enum Error {
     #[snafu(display("Could not initialize global variables"))]
     #[snafu(context(false))]
-    Global { source: GlobalError },
+    Global {
+        #[snafu(source(from(GlobalError, Box::new)))]
+        source: Box<GlobalError>,
+    },
 
     #[snafu(transparent)]
-    Initialize { source: DoInitializeError },
+    Initialize {
+        #[snafu(source(from(DoInitializeError, Box::new)))]
+        source: Box<DoInitializeError>,
+    },
 
     #[snafu(transparent)]
-    Open { source: OpenError },
+    Open {
+        #[snafu(source(from(DiscoverRegistryError, Box::new)))]
+        source: Box<DiscoverRegistryError>,
+    },
 
     #[snafu(transparent)]
-    Add { source: AddError },
+    Add {
+        #[snafu(source(from(AddError, Box::new)))]
+        source: Box<AddError>,
+    },
 
     #[snafu(transparent)]
-    Remove { source: RemoveError },
+    Remove {
+        #[snafu(source(from(RemoveError, Box::new)))]
+        source: Box<RemoveError>,
+    },
 
     #[snafu(transparent)]
-    Html { source: HtmlError },
+    Html {
+        #[snafu(source(from(HtmlError, Box::new)))]
+        source: Box<HtmlError>,
+    },
 
     #[snafu(transparent)]
-    Yank { source: YankError },
+    Yank {
+        #[snafu(source(from(YankError, Box::new)))]
+        source: Box<YankError>,
+    },
 }
 
 trait UnwrapOrDialog<T> {
@@ -306,7 +327,7 @@ enum DoInitializeError {
 }
 
 fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
-    let r = Registry::open(&add.registry)?;
+    let r = discover_registry(add.registry)?;
 
     r.add(global, &add.path)?;
     r.maybe_generate_html()?;
@@ -315,7 +336,7 @@ fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
 }
 
 fn do_remove(_global: &Global, rm: RemoveArgs) -> Result<(), Error> {
-    let r = Registry::open(&rm.registry)?;
+    let r = discover_registry(rm.registry)?;
 
     r.remove(rm.name, rm.version)?;
     r.maybe_generate_html()?;
@@ -324,13 +345,13 @@ fn do_remove(_global: &Global, rm: RemoveArgs) -> Result<(), Error> {
 }
 
 fn do_generate_html(_global: &Global, html: GenerateHtmlArgs) -> Result<(), Error> {
-    let r = Registry::open(html.registry)?;
+    let r = discover_registry(html.registry)?;
     r.generate_html()?;
     Ok(())
 }
 
 fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
-    let r = Registry::open(yank.registry)?;
+    let r = discover_registry(yank.registry)?;
 
     r.yank(yank.name, yank.version, !yank.undo)?;
     r.maybe_generate_html()?;
@@ -339,7 +360,7 @@ fn do_yank(_global: &Global, yank: YankArgs) -> Result<(), Error> {
 }
 
 fn do_list(_global: &Global, list: ListArgs) -> Result<(), Error> {
-    let r = Registry::open(list.registry)?;
+    let r = discover_registry(list.registry)?;
 
     let crates = r.list_all().unwrap();
 
@@ -382,6 +403,46 @@ fn do_list(_global: &Global, list: ListArgs) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+fn discover_registry(path: Option<PathBuf>) -> Result<Registry, DiscoverRegistryError> {
+    use discover_registry_error::*;
+
+    match path {
+        Some(p) => Registry::open(p).context(OpenSnafu),
+        None => {
+            let cwd = env::current_dir().context(CurrentDirSnafu)?;
+
+            match Registry::open(cwd) {
+                Ok(r) => Ok(r),
+                Err(e) if e.is_not_found() => FallbackNotFoundSnafu.fail(),
+                Err(e) => Err(e).context(FallbackOpenSnafu)?,
+            }
+        }
+    }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(module)]
+enum DiscoverRegistryError {
+    #[snafu(display("Could not open the specified registry"))]
+    Open { source: OpenError },
+
+    #[snafu(display("Could not determine the current directory, {}", Self::TRY_THIS))]
+    CurrentDir { source: io::Error },
+
+    #[snafu(display(
+        "The current directory does not contain a registry, {}",
+        Self::TRY_THIS,
+    ))]
+    FallbackNotFound,
+
+    #[snafu(display("Could not open the registry in the current directory"))]
+    FallbackOpen { source: OpenError },
+}
+
+impl DiscoverRegistryError {
+    const TRY_THIS: &'static str = "please use the `--registry` command line option";
 }
 
 #[derive(Debug)]
@@ -725,6 +786,15 @@ enum OpenError {
         source: toml::de::Error,
         path: PathBuf,
     },
+}
+
+impl OpenError {
+    fn is_not_found(&self) -> bool {
+        match self {
+            Self::Read { source, .. } => source.kind() == io::ErrorKind::NotFound,
+            Self::Deserialize { .. } => false,
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
