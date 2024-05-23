@@ -22,6 +22,15 @@ jobs:
           name: binary-linux
           path: target/release/margo
 
+      - name: Package code
+        run: cargo package
+
+      - name: Save package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: target/package/margo-*.crate
+
   release:
     runs-on: ubuntu-latest
     needs: build-linux
@@ -51,3 +60,42 @@ jobs:
         run: gh release create ${tag} margo-linux-x86_64.tar.gz
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: build-linux
+
+    steps:
+      - name: Checkout GitHub Pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Determine tag
+        run: |
+          tag=$(echo ${{github.event.ref}} | cut -d/ -f3)
+          echo "tag=${tag}" >> $GITHUB_ENV
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: package
+
+      - name: Publish crate
+        uses: integer32llc/margo-actions@main
+        with:
+          crates: package/*.crate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit and push to GitHub Pages
+        run: |-
+          set -eu
+
+          git config user.email "margo@integer32.com"
+          git config user.name "Margo GitHub Action"
+
+          git add .
+          git commit -m "Release ${tag}"
+          git push origin gh-pages
