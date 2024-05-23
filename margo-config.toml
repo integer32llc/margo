@@ -1,0 +1,7 @@
+version = "1"
+base_url = "https://integer32llc.github.io/margo/"
+auth_required = false
+
+[html]
+enabled = true
+suggested_registry_name = "margo"
