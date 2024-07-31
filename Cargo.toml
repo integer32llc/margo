@@ -24,6 +24,9 @@ members = [
 rust_2018_idioms = "deny"
 unused_crate_dependencies = "deny"
 
+[workspace.lints.clippy]
+lint_groups_priority = { level = "allow", priority = 1 } # Remove after 1.80. https://github.com/rust-lang/rust-clippy/issues/12270
+
 [workspace.dependencies]
 argh = { version = "0.1.12", default-features = false }
 registry-conformance = { version = "0.5.0", registry = "registry-conformance" }
