@@ -15,7 +15,7 @@ GitHub Pages, check out our [action][].
 ### Install Margo
 
 ```bash
-cargo install margo
+cargo install margo --index sparse+https://integer32llc.github.io/margo/
 ```
 
 ### Initialize the registry
