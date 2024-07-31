@@ -751,7 +751,7 @@ impl Registry {
 
     fn crate_file_path_for(&self, name: &CrateName, version: &Version) -> PathBuf {
         let mut crate_file_path = self.crate_dir_for(name);
-        crate_file_path.push(&format!("{}.crate", version));
+        crate_file_path.push(format!("{}.crate", version));
         crate_file_path
     }
 }
