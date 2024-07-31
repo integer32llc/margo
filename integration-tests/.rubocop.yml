@@ -25,6 +25,3 @@ Metrics/MethodLength:
 
 RSpec/ExampleLength:
   Max: 50
-
-RSpecRails/InferredSpecType:
-  Enabled: false

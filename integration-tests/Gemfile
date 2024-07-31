@@ -9,4 +9,4 @@ gem 'webrick', '~> 1.8'
 
 gem 'rubocop', '~> 1.63', require: false
 gem 'rubocop-capybara', '~> 2.20', require: false
-gem 'rubocop-rspec', '~> 2.29', require: false
+gem 'rubocop-rspec', '~> 3.0', require: false
