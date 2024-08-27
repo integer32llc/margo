@@ -31,9 +31,41 @@ jobs:
           name: package
           path: target/package/margo-*.crate
 
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build code
+        run: cargo build --release
+
+      - name: Save binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-windows
+          path: target/release/margo.exe
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build code
+        run: cargo build --release
+
+      - name: Save binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-macos-aarch64
+          path: target/release/margo
+
   release:
     runs-on: ubuntu-latest
-    needs: build-linux
+    needs: [build-linux, build-windows, build-macos]
 
     steps:
       - name: Checkout code
@@ -44,20 +76,39 @@ jobs:
           tag=$(echo ${{github.event.ref}} | cut -d/ -f3)
           echo "tag=${tag}" >> $GITHUB_ENV
 
-      - name: Download binary artifacts
+      - name: Download binary artifacts (Linux)
         uses: actions/download-artifact@v4
         with:
           name: binary-linux
           path: linux
 
+      - name: Download binary artifacts (Windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-windows
+          path: windows
+
+      - name: Download binary artifacts (macOS)
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-macos-aarch64
+          path: macos-aarch64
+
       - name: Fix artifact permissions
-        run: chmod +x linux/margo
+        run: chmod +x {linux,macos-aarch64}/margo
 
       - name: Compress artifacts
-        run: tar czf margo-linux-x86_64.tar.gz -C linux margo
+        run: |
+          tar czf margo-linux-x86_64.tar.gz -C linux margo
+          tar czf margo-macos-aarch64.tar.gz -C macos-aarch64 margo
+          pushd windows; zip ../margo-windows-x86_64.exe.zip margo.exe; popd
 
       - name: Release
-        run: gh release create ${tag} margo-linux-x86_64.tar.gz
+        run: |
+          gh release create ${tag} \
+            margo-linux-x86_64.tar.gz \
+            margo-macos-aarch64.tar.gz \
+            margo-windows-x86_64.exe.zip
         env:
           GH_TOKEN: ${{ github.token }}
 
