@@ -1014,9 +1014,33 @@ enum ExtractRootCargoTomlError {
 fn adapt_cargo_toml_to_index_entry(
     global: &Global,
     config: &ConfigV1,
-    cargo_toml: cargo_toml::Root,
+    mut cargo_toml: cargo_toml::Root,
     checksum_hex: String,
 ) -> index_entry::Root {
+    // Remove features that refer to dev-dependencies as we don't
+    // track those anyway.
+    {
+        // Ignore dependencies that also occur as a regular or build
+        // dependency, as we *do* track those.
+        let reg_dep_names = cargo_toml.dependencies.keys();
+        let build_dep_names = cargo_toml.build_dependencies.keys();
+        let mut only_dev_dep_names = cargo_toml.dev_dependencies.keys().collect::<BTreeSet<_>>();
+        for name in reg_dep_names.chain(build_dep_names) {
+            only_dev_dep_names.remove(name);
+        }
+
+        for name in only_dev_dep_names {
+            // We don't care about the official package name here as the
+            // feature syntax has to match the user-specified dependency
+            // name.
+            let prefix = format!("{name}/");
+
+            for enabled in cargo_toml.features.values_mut() {
+                enabled.retain(|enable| !enable.starts_with(&prefix));
+            }
+        }
+    }
+
     let mut deps: Vec<_> = cargo_toml
         .dependencies
         .into_iter()
@@ -1125,6 +1149,9 @@ mod cargo_toml {
 
         #[serde(default)]
         pub build_dependencies: Dependencies,
+
+        #[serde(default)]
+        pub dev_dependencies: Dependencies,
 
         #[serde(default)]
         pub target: BTreeMap<String, Target>,
