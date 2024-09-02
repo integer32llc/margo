@@ -72,7 +72,7 @@ struct AddArgs {
     registry: Option<PathBuf>,
 
     #[argh(positional)]
-    path: PathBuf,
+    path: Vec<PathBuf>,
 }
 
 /// Remove a crate from the registry
@@ -329,7 +329,9 @@ enum DoInitializeError {
 fn do_add(global: &Global, add: AddArgs) -> Result<(), Error> {
     let r = discover_registry(add.registry)?;
 
-    r.add(global, &add.path)?;
+    for i in add.path {
+        r.add(global, i)?;
+    }
     r.maybe_generate_html()?;
 
     Ok(())
