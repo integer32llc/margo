@@ -111,6 +111,10 @@ fn do_assets_watch(
 ) -> Result<(), AssetsWatchError> {
     use assets_watch_error::*;
 
+    // The directory needs to exist before we can watch it.
+    std::fs::create_dir_all(&asset_root)
+        .context(AssetDirectoryCreateSnafu { path: &asset_root })?;
+
     let (tx, rx) = mpsc::channel();
 
     let mut watcher = notify::recommended_watcher(move |evt: notify::Result<notify::Event>| {
@@ -142,6 +146,9 @@ fn do_assets_watch(
 #[derive(Debug, Snafu)]
 #[snafu(module)]
 enum AssetsWatchError {
+    #[snafu(display("Could not create the asset directory"))]
+    AssetDirectoryCreate { source: io::Error, path: PathBuf },
+
     #[snafu(display("Could not create the filesystem watcher"))]
     WatcherCreate { source: notify::Error },
 
