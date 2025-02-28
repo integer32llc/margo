@@ -70,6 +70,23 @@ EOF
 cargo add --registry my-registry some-crate
 ```
 
+## Other Margo commands
+
+You can omit the `--registry` argument by running the command in the
+registry directory directly.
+
+### List the crates in the registry
+
+```bash
+margo list --registry my-registry
+```
+
+### Remove a crate
+
+```bash
+margo rm --registry my-registry some-crate --version x.y.z
+```
+
 ## Key differences from Crates.io
 
 - 💅 Does not impose file size limits
