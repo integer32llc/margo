@@ -116,9 +116,9 @@ async fn auth(
     next: Next,
 ) -> Result<Response, StatusCode> {
     if let Some((username, password)) = webserver_basic_auth {
-        let creds_match = auth_header.as_ref().map_or(false, |auth| {
-            auth.username() == username && auth.password() == password
-        });
+        let creds_match = auth_header
+            .as_ref()
+            .is_some_and(|auth| auth.username() == username && auth.password() == password);
 
         if !creds_match {
             return Err(StatusCode::UNAUTHORIZED);
