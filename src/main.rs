@@ -1357,9 +1357,9 @@ mod index_entry {
         /// The current values are:
         //
         /// * 1: The schema as documented here, not including newer additions.
-        ///      This is honored in Rust version 1.51 and newer.
+        ///   This is honored in Rust version 1.51 and newer.
         /// * 2: The addition of the `features2` field.
-        ///      This is honored in Rust version 1.60 and newer.
+        ///   This is honored in Rust version 1.60 and newer.
         pub v: u32,
 
         /// Features with new, extended syntax, such as namespaced
