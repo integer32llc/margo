@@ -2,7 +2,7 @@
 name = "margo"
 version = "0.1.6"
 edition = "2021"
-rust-version = "1.77.0"
+rust-version = "1.81.0"
 
 license = "MIT OR Apache-2.0"
 
