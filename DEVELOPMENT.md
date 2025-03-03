@@ -1,6 +1,6 @@
 # Prerequisites
 
-- Rust 1.77 (or newer)
+- Rust 1.81 (or newer)
 - NodeJS 20 (or newer) with pnpm 9 (or newer)
 - Ruby 3.3 (or newer)
 
