@@ -44,3 +44,6 @@ MARGO_BINARY = ENV.fetch('MARGO_BINARY', '../target/debug/margo')
 
 Capybara.default_driver = Capybara.javascript_driver = :selenium_headless
 Capybara.run_server = false
+
+Capybara::Selenium::Driver.load_selenium
+Selenium::WebDriver.logger.ignore(:clear_local_storage, :clear_session_storage)
