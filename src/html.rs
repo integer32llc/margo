@@ -184,7 +184,7 @@ fn index(config: &ConfigV1, crates: &ListAll) -> Markup {
                                         span class="truncate" { (c.as_str()) }
                                     }
                                     td {
-                                        select class="w-full" name="version" {
+                                        select class="w-full bg-white" name="version" {
                                             @for (v, c, select) in most_interesting(v) {
                                                 @let suffix = if c.yanked { " (yanked)" } else { "" };
                                                 option selected[select] { (v) (suffix) }
