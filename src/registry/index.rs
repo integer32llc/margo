@@ -59,6 +59,11 @@ impl Index {
         fs::create_dir_all(&registry.index_dir_for(&name))?;
         let path = registry.index_file_path_for(&name);
 
+        Self::open_or_new_in_path(name, path)
+    }
+
+    /// Open the index file at the given path, or create an empty index if no such file exists.
+    fn open_or_new_in_path(name: PackageName, path: PathBuf) -> Result<Self> {
         let index_file = match File::open(&path) {
             Ok(f) => BufReader::new(f),
             // If the index file doesn't exist, return an empty index - no further parsing necessary.
@@ -137,7 +142,7 @@ impl Index {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct IndexEntry {
     /// The name of the package.
     pub name: PackageName,
@@ -210,7 +215,7 @@ pub struct IndexEntry {
     pub rust_version: Option<RustVersion>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Dependency {
     /// Name of the dependency.
     ///
@@ -263,7 +268,7 @@ pub struct Dependency {
     pub package: Option<PackageName>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyKind {
     #[allow(unused)]
@@ -271,4 +276,164 @@ pub enum DependencyKind {
     Dev,
     Build,
     Normal,
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Index, IndexEntry};
+    use assert_fs::prelude::*;
+    use assert_fs::TempDir;
+    use cargo_util_schemas::manifest::PackageName;
+    use predicates::prelude::*;
+    use semver::Version;
+    use std::str::FromStr;
+
+    fn name() -> PackageName {
+        PackageName::from_str("test_package").unwrap()
+    }
+
+    fn test_index_entry(major: u64, minor: u64, patch: u64) -> IndexEntry {
+        IndexEntry {
+            name: name(),
+            vers: Version::new(major, minor, patch),
+            deps: vec![],
+            cksum: "".to_string(),
+            features: Default::default(),
+            yanked: false,
+            links: None,
+            v: 0,
+            features2: Default::default(),
+            rust_version: None,
+        }
+    }
+
+    #[test]
+    fn open_or_new() {
+        let dir = TempDir::new().unwrap();
+        let index_file = dir.child("index");
+
+        let mut index_a = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+        index_a.add(test_index_entry(1, 0, 0));
+        index_a.save().unwrap();
+
+        let index_b = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+        assert_eq!(
+            index_a.entries, index_b.entries,
+            "indexes should contain the same entries"
+        );
+    }
+
+    #[test]
+    fn save() {
+        let dir = TempDir::new().unwrap();
+        dir.child(".keep").touch().unwrap();
+
+        let index_file = dir.child("index");
+        index_file.assert(predicate::path::missing().name("index file should not exist yet"));
+
+        let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+
+        // Add 1 version
+        index.add(test_index_entry(1, 0, 0));
+        index.save().unwrap();
+
+        index_file.assert(predicate::path::exists().name("index file should be created"));
+        index_file.assert(
+            predicate::str::contains('\n')
+                .count(1)
+                .name("index file should contain 1 line"),
+        );
+        index_file
+            .assert(predicate::str::ends_with('\n').name("index file should end with newline"));
+
+        // Add a 2nd version
+        index.add(test_index_entry(1, 0, 1));
+        index.save().unwrap();
+
+        index_file.assert(
+            predicate::str::contains('\n')
+                .count(2)
+                .name("index file should contain 2 lines"),
+        );
+        index_file
+            .assert(predicate::str::ends_with('\n').name("index file should end with newline"));
+
+        // Remove both versions
+        index.remove(&Version::new(1, 0, 0));
+        index.remove(&Version::new(1, 0, 1));
+        index.save().unwrap();
+
+        index_file.assert(predicate::path::missing().name("index file should be removed"));
+    }
+
+    #[test]
+    fn remove() {
+        let dir = TempDir::new().unwrap();
+        let index_file = dir.child("index");
+
+        let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+        index.add(test_index_entry(1, 0, 0));
+        index.add(test_index_entry(1, 1, 0));
+        index.add(test_index_entry(1, 1, 1));
+        index.save().unwrap();
+
+        assert_eq!(index.entries.len(), 3, "index should contain 3 versions");
+
+        index.remove(&Version::new(1, 0, 0));
+        assert_eq!(
+            index.entries.len(),
+            2,
+            "index should contain 2 versions after removing version"
+        );
+
+        index.remove(&Version::new(1, 0, 0));
+        assert_eq!(
+            index.entries.len(),
+            2,
+            "index should still contain 2 versions after removing nonexistent version"
+        );
+    }
+
+    #[test]
+    fn contains_version() {
+        let dir = TempDir::new().unwrap();
+        let index_file = dir.child("index");
+
+        let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+
+        index.add(test_index_entry(1, 0, 0));
+
+        assert!(
+            index.contains_version(&Version::new(1, 0, 0)),
+            "index should contain same version"
+        );
+        assert!(
+            !index.contains_version(&Version::new(0, 1, 1)),
+            "index should not contain other version"
+        );
+    }
+
+    #[test]
+    fn yank() {
+        let dir = TempDir::new().unwrap();
+        let index_file = dir.child("index");
+
+        let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
+
+        index.add(test_index_entry(1, 0, 0));
+        index.add(test_index_entry(1, 1, 0));
+
+        assert_eq!(
+            index.latest_non_yanked_version(),
+            Some(&Version::new(1, 1, 0)),
+            "latest non-yanked version should return latest version"
+        );
+
+        index.set_yanked(&Version::new(1, 1, 0), true).unwrap();
+        assert_eq!(
+            index.latest_non_yanked_version(),
+            Some(&Version::new(1, 0, 0)),
+            "latest non-yanked version should return previous version"
+        );
+    }
 }
