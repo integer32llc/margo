@@ -155,7 +155,7 @@ impl Registry {
         // Get the crate path first because we can't access `entry` any more after adding it to the index.
         let crate_path = self.crate_file_path_for(&entry.name, &entry.vers);
 
-        index.add(entry);
+        index.add(entry)?;
         index.save()?;
 
         // FUTURE: Stronger file system consistency (atomic file overwrites, rollbacks on error)

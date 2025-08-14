@@ -34,8 +34,14 @@ impl Index {
         Ok(())
     }
 
-    pub fn add(&mut self, entry: IndexEntry) {
+    /// Add an entry to the index.
+    pub fn add(&mut self, entry: IndexEntry) -> Result<()> {
+        if self.contains_version(&entry.vers) {
+            Err(MargoError::DuplicateVersion(self.name.clone(), entry.vers.clone()))?;
+        }
+
         self.entries.insert(entry.vers.clone(), entry);
+        Ok(())
     }
 
     pub fn remove(&mut self, version: &Version) {
