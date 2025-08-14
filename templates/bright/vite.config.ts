@@ -1,0 +1,14 @@
+import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+	root: 'src',
+	build: {
+		outDir: '../dist',
+		emptyOutDir: true,
+	},
+	esbuild: {
+		jsxFactory: 'h',
+	},
+	plugins: [tailwindcss()],
+});

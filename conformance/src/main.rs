@@ -92,18 +92,16 @@ impl MargoBuilder {
 
         let mut cmd = this.command();
 
-        cmd.arg("init")
+        cmd.arg(&this.directory)
+            .arg("init")
             .args(["--base-url", &format!("http://{webserver_address}")])
-            .arg("--defaults");
+            .arg("--use-defaults");
 
         if auth_required {
             cmd.args(["--auth-required", "true"]);
         }
 
-        cmd.arg(&this.directory)
-            .expect_success()
-            .await
-            .context(ExecutionSnafu)?;
+        cmd.expect_success().await.context(ExecutionSnafu)?;
 
         Ok(this)
     }
@@ -174,9 +172,8 @@ impl Margo {
         let package_path = crate_.package().await.context(PackageSnafu)?;
 
         self.command()
-            .arg("add")
-            .arg("--registry")
             .arg(&self.directory)
+            .arg("add")
             .arg(package_path)
             .expect_success()
             .await
@@ -189,11 +186,10 @@ impl Margo {
         use remove_error::*;
 
         self.command()
-            .arg("rm")
-            .arg("--registry")
             .arg(&self.directory)
+            .arg("rm")
             .arg(crate_.name())
-            .args(["--version", crate_.version()])
+            .arg(crate_.version())
             .expect_success()
             .await
             .context(ExecutionSnafu)?;
@@ -205,11 +201,10 @@ impl Margo {
         use yank_error::*;
 
         let mut cmd = self.command();
-        cmd.arg("yank")
-            .arg("--registry")
-            .arg(&self.directory)
+        cmd.arg(&self.directory)
+            .arg("yank")
             .arg(crate_.name())
-            .args(["--version", crate_.version()]);
+            .arg(crate_.version());
 
         if !yanked {
             cmd.arg("--undo");

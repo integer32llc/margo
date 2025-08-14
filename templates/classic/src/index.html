@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{title}}</title>
+	<link rel="stylesheet" href="main.css">
+	<script type="module" src="main.ts"></script>
+</head>
+
+<body class="flex flex-col min-h-screen bg-theme-salmon-light">
+<header>
+	<h1 class="text-3xl font-bold bg-theme-purple text-theme-salmon-light p-2 drop-shadow-xl">{{title}}</h1>
+</header>
+
+<section class="p-1">
+	<h1 class="text-2xl">
+		<a class="hover:after:content-['_§']" id="getting-started" href="#getting-started">Getting started</a>
+	</h1>
+
+	<ol class="list-inside list-decimal">
+		<li>
+			Add the registry definition to your <code>.cargo/config.toml</code>:
+			<mg-copy>
+				<div class="relative border border-black bg-theme-rose-light m-1 p-1 overflow-x-auto">
+					<button class="hidden absolute top-0 right-0 grid" data-target="copy">
+						<span class="col-start-1 row-start-1 leading-none p-1" data-target="state0">Copy</span>
+						<span class="col-start-1 row-start-1 leading-none p-1 invisible"
+							  data-target="state1">Copied</span>
+					</button>
+
+					<pre><code data-target="content">[registries]
+{{registry.suggested_name}} = { index = "sparse+{{registry.base_url}}" }</code></pre>
+				</div>
+			</mg-copy>
+		</li>
+		<li>
+			Add your dependency to your project:
+			<mg-copy>
+				<div class="relative border border-black bg-theme-rose-light m-1 p-1 overflow-x-auto">
+					<button class="hidden absolute top-0 right-0 grid" data-target="copy">
+						<span class="col-start-1 row-start-1 leading-none p-1" data-target="state0">Copy</span>
+						<span class="col-start-1 row-start-1 leading-none p-1 invisible"
+							  data-target="state1">Copied</span>
+					</button>
+
+					<pre><code data-target="content">cargo add --registry={{../registry.suggested_name}} some-crate-name</code></pre>
+				</div>
+			</mg-copy>
+		</li>
+	</ol>
+
+	For complete details, check the <a
+		href="https://doc.rust-lang.org/cargo/reference/registries.html#using-an-alternate-registry"
+		class="underline text-blue-600 hover:text-blue-800 visited:text-purple-600">Cargo documentation</a>.
+</section>
+
+<section class="p-1">
+	<h1 class="text-2xl">
+		<a class="hover:after:content-['_§']" id="crates" href="#crates">Available crates</a>
+	</h1>
+
+	<table class="table-fixed w-full">
+		<thead>
+		<tr>
+			<th class="w-4/5 text-left">Name</th>
+			<th>Versions</th>
+		</tr>
+		</thead>
+		<tbody>
+		{{#each crates}}
+		<tr class="hover:bg-theme-orange">
+			<td><span class="truncate">{{name}}</span></td>
+			<td><select class="w-full" name="version">
+				{{#each versions}}
+				<option>{{version}}{{#if yanked}} (yanked){{/if}}</option>
+				{{/each}}
+			</select></td>
+		</tr>
+		{{/each}}
+		</tbody>
+	</table>
+</section>
+
+<footer class="grow place-content-end text-center">
+	<span class="border-t border-dashed border-theme-purple">
+		Powered by <a href="https://github.com/integer32llc/margo"
+					  class="underline text-blue-600 hover:text-blue-800 visited:text-purple-600">Margo</a>
+	</span>
+</footer>
+</body>
+</html>

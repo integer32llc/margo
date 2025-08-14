@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{title}}</title>
+	<link rel="stylesheet" href="main.css">
+	<script type="module" src="main.ts"></script>
+</head>
+
+<body class="
+	flex flex-col min-h-screen
+	font-sans font-light text-stone-900
+	bg-fixed bg-gradient-to-br from-stone-50 to-stone-200">
+
+<div class="grow w-full">
+	<header class="py-12 sm:pb-32 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-400 text-white text-center">
+		<p class="text-3xl font-semibold bg-theme-purple text-theme-salmon-light drop-shadow-xl">{{title}}</p>
+	</header>
+
+	<div class="md:flex sm:px-4">
+		{{#if (gt (len crates) 1)}}
+			<div class="flex-none hidden lg:block lg:w-56 xl:w-64 md:py-6 xl:px-2 xl:py-8">
+				<nav class="sticky top-3 xl:top-5">
+					<h1 class="font-semibold text-stone-600">Crates</h1>
+
+					{{#each crates}}
+						<a href="#{{name}}"
+						   class="block -mx-2.5 px-2.5 py-0.5 text-stone-600 hover:text-amber-500 active:text-amber-500 rounded-sm">{{name}}</a>
+					{{/each}}
+				</nav>
+			</div>
+		{{/if}}
+
+		<div class="
+			max-w-full flex-1 overflow-x-hidden sm:-mt-20
+			{{#if (gt (len crates) 1)}} 2xl:mr-64 {{/if}}
+			">
+			<main class="max-w-screen-lg mx-auto">
+				<section
+						class="mb-4 lg:mb-8 p-8 sm:px-10 sm:py-8 md:px-12 md:py-10 lg:px-16 lg:py-12 bg-white sm:rounded-lg shadow">
+					<h1 class="flex-none pb-4 text-2xl font-semibold">Getting started</h1>
+
+					<p>Add the registry definition to your <code>.cargo/config.toml</code>:
+						<code-block
+								class="block mt-1 mb-4 px-6 py-4 bg-white border border-stone-300 rounded-sm text-sm text-stone-700 font-mono whitespace-pre-wrap">
+							[registries]
+							{{registry.suggested_name}} = { index = "sparse+{{registry.base_url}}" }
+						</code-block>
+					</p>
+
+					<p class="text-stone-500">For more details on alternate registries, check the <a
+							href="https://doc.rust-lang.org/cargo/reference/registries.html#using-an-alternate-registry"
+							target="_blank">Cargo documentation</a>.</p>
+				</section>
+
+				{{#each crates}}
+					<section id="{{name}}"
+							 class="mb-8 p-8 sm:px-10 sm:py-8 md:px-12 md:py-10 lg:px-16 lg:py-12 bg-gradient-to-br from-white to-stone-100 sm:rounded-lg shadow">
+						<h1 class="pb-2 text-2xl">
+							<em class="font-semibold not-italic">{{name}}</em>
+							<span class="pl-0.5 text-xl text-stone-600">{{latest_non_yanked_version.version}}</span>
+						</h1>
+
+						<div class="md:flex md:gap-8 max-md:space-y-8">
+							<div class="flex-1 space-y-2 overflow-x-hidden">
+								<code-block
+										class="block mb-8 px-6 py-4 bg-white border border-stone-300 text-sm text-stone-700 font-mono rounded-sm">
+									cargo add --registry={{../registry.suggested_name}} {{name}}
+								</code-block>
+
+								{{#if readme_html}}
+									<div class="prose prose-amber max-w-full">
+										{{{readme_html}}}
+									</div>
+								{{else if description}}
+									<p>{{description}}</p>
+								{{/if}}
+							</div>
+
+							<div class="flex-none flex md:block md:w-32 gap-12">
+								<div class="md:mb-8">
+									<h2 class="pb-1 text-stone-700 font-semibold">Versions</h2>
+									{{#each versions}}
+										<p class="
+											{{#if yanked}} line-through {{/if}}
+											{{#if (eq version ../latest_non_yanked_version.version)}} font-semibold {{/if}}
+										">{{version}}</p>
+									{{/each}}
+								</div>
+
+								<div>
+									<h2 class="pb-1 text-stone-700 font-semibold">Features</h2>
+									{{#each features}}
+										<p>{{this}}</p>
+									{{/each}}
+								</div>
+							</div>
+						</div>
+					</section>
+				{{else}}
+					<p class="py-16 text-stone-500 text-center">This registry doesn't contain any crates.</p>
+				{{/each}}
+			</main>
+		</div>
+	</div>
+</div>
+<footer class="py-4 text-sm text-center text-stone-600">
+	Powered by <a
+		href="https://github.com/integer32llc/margo"
+		target="_blank"
+		rel="noreferrer noopener">Margo</a>
+</footer>
+</body>
+</html>

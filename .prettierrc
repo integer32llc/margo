@@ -1,0 +1,11 @@
+{
+  "bracketSpacing": true,
+  "experimentalOperatorPosition": "start",
+  "htmlWhitespaceSensitivity": "css",
+  "quoteProps": "consistent",
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "useTabs": true,
+  "tabWidth": 4
+}

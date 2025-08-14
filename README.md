@@ -25,7 +25,7 @@ This will create a new registry in the directory
 `https://my-registry.example.com`.
 
 ```bash
-margo init my-registry-directory --base-url https://my-registry.example.com
+margo my-registry-directory init --base-url https://my-registry.example.com
 ```
 
 ### Add a crate to the registry
@@ -36,7 +36,7 @@ to publish.
 
 ```bash
 # Acquire a crate package, such as by running `cargo package`
-margo add --registry my-registry-directory some-crate/target/package/some-crate-1.2.3.crate
+margo my-registry-directory add some-crate/target/package/some-crate-1.2.3.crate
 ```
 
 ### Serve the registry files with your choice of webserver
@@ -67,7 +67,7 @@ EOF
 ### Add your crate
 
 ```bash
-cargo add --registry my-registry some-crate
+cargo my-registry add path/to/some-crate/1.0.7.crate
 ```
 
 ## Other Margo commands
@@ -78,13 +78,19 @@ registry directory directly.
 ### List the crates in the registry
 
 ```bash
-margo list --registry my-registry
+margo my-registry list
 ```
 
-### Remove a crate
+### Yank a crate version
 
 ```bash
-margo rm --registry my-registry some-crate --version x.y.z
+margo my-registry yank some-crate 1.0.7
+```
+
+### Remove a crate version
+
+```bash
+margo my-registry rm some-crate 1.0.7
 ```
 
 ## Key differences from Crates.io
