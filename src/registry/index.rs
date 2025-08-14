@@ -43,7 +43,10 @@ impl Index {
     /// the same version already exists in the index.
     pub fn add(&mut self, entry: IndexEntry) -> Result<()> {
         if self.contains_version(&entry.vers) {
-            Err(MargoError::DuplicateVersion(self.name.clone(), entry.vers.clone()))?;
+            Err(MargoError::DuplicateVersion(
+                self.name.clone(),
+                entry.vers.clone(),
+            ))?;
         }
 
         self.entries.insert(entry.vers.clone(), entry);
@@ -391,7 +394,10 @@ mod test {
         index.add(test_index_entry(1, 0, 0)).unwrap();
         assert_eq!(index.entries.len(), 1, "should contain 1 entry");
 
-        assert!(index.add(test_index_entry(1, 0, 0)).is_err(), "should error when adding a duplicate version");
+        assert!(
+            index.add(test_index_entry(1, 0, 0)).is_err(),
+            "should error when adding a duplicate version"
+        );
         assert_eq!(index.entries.len(), 1, "should still contain 1 entry");
 
         index.add(test_index_entry(1, 2, 0)).unwrap();
