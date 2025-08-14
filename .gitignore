@@ -6,6 +6,5 @@ target/
 dist/
 
 src/html/assets.rs
-src/templates/*
 
 .DS_Store
