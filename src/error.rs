@@ -10,7 +10,7 @@ pub enum MargoError {
 
     #[error("The template archive doesn't contain an index file (index.html or index.hbs), or the index file is empty.")]
     MissingTemplateIndex,
-    
+
     #[error("Version {1} of package {0} already exists in the index.")]
     DuplicateVersion(PackageName, Version),
 }

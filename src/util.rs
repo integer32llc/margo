@@ -104,8 +104,8 @@ impl<T> VecExt<T> for Vec<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::str::FromStr;
     use assert_fs::TempDir;
+    use std::str::FromStr;
 
     #[test]
     fn url_ext_ensure_trailing_slash() {
@@ -160,5 +160,4 @@ mod test {
         let sorted = vec.sorted_by(|a, b| a.cmp(&b));
         assert_eq!(sorted, vec![1, 3, 5]);
     }
-
 }

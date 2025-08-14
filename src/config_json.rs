@@ -24,7 +24,10 @@ pub struct ConfigJson {
 impl ConfigJson {
     pub fn new(config: &LatestConfig) -> Result<Self> {
         Ok(ConfigJson {
-            dl: format!("{base}/crates/{{lowerprefix}}/{{crate}}/{{version}}.crate", base = config.base_url),
+            dl: format!(
+                "{base}/crates/{{lowerprefix}}/{{crate}}/{{version}}.crate",
+                base = config.base_url
+            ),
             api: None,
             auth_required: config.auth_required,
         })
