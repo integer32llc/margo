@@ -19,10 +19,13 @@ pub struct Index {
 }
 
 impl Index {
+    /// The most recent version that hasn't been yanked. `None` if
+    /// the index is empty or all versions have been yanked.
     pub fn latest_non_yanked_version(&self) -> Option<&Version> {
         self.entries.values().rfind(|e| !e.yanked).map(|e| &e.vers)
     }
 
+    /// Set the yanked state for a given version.
     pub fn set_yanked(&mut self, version: &Version, yanked: bool) -> Result<()> {
         let entry = self.entries.get_mut(version).context(format!(
             "Version {version} doesn't exist in the index for this crate.",
@@ -34,7 +37,10 @@ impl Index {
         Ok(())
     }
 
-    /// Add an entry to the index.
+    /// Add a version entry to the index.
+    ///
+    /// This method may return a [MargoError::DuplicateVersion] error if an entry with
+    /// the same version already exists in the index.
     pub fn add(&mut self, entry: IndexEntry) -> Result<()> {
         if self.contains_version(&entry.vers) {
             Err(MargoError::DuplicateVersion(self.name.clone(), entry.vers.clone()))?;
@@ -44,6 +50,9 @@ impl Index {
         Ok(())
     }
 
+    /// Remove a version from the index.
+    ///
+    /// If the version doesn't exist, this method will do nothing.
     pub fn remove(&mut self, version: &Version) {
         if self.entries.remove(version).is_none() {
             println!(
@@ -53,6 +62,7 @@ impl Index {
         }
     }
 
+    /// True if an entry for the given version exists in the index.
     pub fn contains_version(&self, version: &Version) -> bool {
         self.entries.contains_key(version)
     }
@@ -319,7 +329,7 @@ mod test {
         let index_file = dir.child("index");
 
         let mut index_a = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
-        index_a.add(test_index_entry(1, 0, 0));
+        index_a.add(test_index_entry(1, 0, 0)).unwrap();
         index_a.save().unwrap();
 
         let index_b = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
@@ -340,7 +350,7 @@ mod test {
         let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
 
         // Add 1 version
-        index.add(test_index_entry(1, 0, 0));
+        index.add(test_index_entry(1, 0, 0)).unwrap();
         index.save().unwrap();
 
         index_file.assert(predicate::path::exists().name("index file should be created"));
@@ -353,7 +363,7 @@ mod test {
             .assert(predicate::str::ends_with('\n').name("index file should end with newline"));
 
         // Add a 2nd version
-        index.add(test_index_entry(1, 0, 1));
+        index.add(test_index_entry(1, 0, 1)).unwrap();
         index.save().unwrap();
 
         index_file.assert(
@@ -394,9 +404,9 @@ mod test {
         let index_file = dir.child("index");
 
         let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
-        index.add(test_index_entry(1, 0, 0));
-        index.add(test_index_entry(1, 1, 0));
-        index.add(test_index_entry(1, 1, 1));
+        index.add(test_index_entry(1, 0, 0)).unwrap();
+        index.add(test_index_entry(1, 1, 0)).unwrap();
+        index.add(test_index_entry(1, 1, 1)).unwrap();
         index.save().unwrap();
 
         assert_eq!(index.entries.len(), 3, "index should contain 3 versions");
@@ -423,7 +433,7 @@ mod test {
 
         let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
 
-        index.add(test_index_entry(1, 0, 0));
+        index.add(test_index_entry(1, 0, 0)).unwrap();
 
         assert!(
             index.contains_version(&Version::new(1, 0, 0)),
@@ -442,8 +452,8 @@ mod test {
 
         let mut index = Index::open_or_new_in_path(name(), index_file.to_path_buf()).unwrap();
 
-        index.add(test_index_entry(1, 0, 0));
-        index.add(test_index_entry(1, 1, 0));
+        index.add(test_index_entry(1, 0, 0)).unwrap();
+        index.add(test_index_entry(1, 1, 0)).unwrap();
 
         assert_eq!(
             index.latest_non_yanked_version(),
