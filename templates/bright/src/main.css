@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@plugin '@tailwindcss/typography';
+
+@font-face {
+    font-family: 'Jetbrains Mono';
+    font-weight: 400;
+    font-style: normal;
+    src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Neris';
+    font-weight: 300;
+    font-style: normal;
+    src: url('fonts/Neris-Light.woff') format('woff');
+}
+@font-face {
+    font-family: 'Neris';
+    font-weight: 600;
+    font-style: normal;
+    src: url('fonts/Neris-SemiBold.woff') format('woff');
+}
+@font-face {
+    font-family: 'Neris';
+    font-weight: 800;
+    font-style: normal;
+    src: url('fonts/Neris-Black.woff') format('woff');
+}
+
+@theme {
+    --font-mono: 'Jetbrains Mono', monospace;
+    --font-sans: 'Neris', sans-serif;
+}
+
+@layer base {
+    html {
+        @apply font-sans scroll-smooth;
+    }
+
+    code {
+        @apply font-mono text-sm;
+    }
+
+    a[target="_blank"] {
+        @apply font-semibold text-stone-700 hover:text-amber-500
+            underline underline-offset-1 decoration-stone-400 hover:decoration-amber-400;
+    }
+}
+
+@layer components {
+    nav a.nav-highlight {
+        @apply !text-amber-500 font-semibold;
+    }
+}

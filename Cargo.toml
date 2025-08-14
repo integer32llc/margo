@@ -12,7 +12,7 @@ repository = "https://github.com/integer32llc/static-registry"
 [features]
 default = ["html"]
 
-html = ["dep:maud", "dep:indoc"]
+html = ["dep:handlebars", "dep:comrak"]
 
 [workspace]
 members = [
@@ -28,7 +28,7 @@ unused_crate_dependencies = "deny"
 lint_groups_priority = { level = "allow", priority = 1 } # Remove after 1.80. https://github.com/rust-lang/rust-clippy/issues/12270
 
 [workspace.dependencies]
-argh = { version = "0.1.12", default-features = false }
+argh = { version = "0.1.13", default-features = false }
 registry-conformance = { version = "0.5.3", registry = "registry-conformance" }
 snafu = { version = "0.8.2", default-features = false, features = ["rust_1_65", "std"] }
 tokio = { version = "1.37.0", default-features = false, features = ["macros", "process", "rt-multi-thread"] }
@@ -38,22 +38,30 @@ workspace = true
 
 [dependencies]
 argh.workspace = true
-ascii = { version = "1.1.0", default-features = false, features = ["serde", "std"] }
+argh.features = ["help"]
+cargo-util-schemas = "0.8.2"
+colored = "3.0.0"
+comrak = { version = "0.40", optional = true, features = ["shortcodes"] }
 dialoguer = { version = "0.11.0", default-features = false }
+enum-iterator = "2.1.0"
 flate2 = { version = "1.0.28", default-features = false, features = ["rust_backend"] }
+handlebars = { version = "6.3.2", optional = true }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
-indoc = { version = "2.0.5", default-features = false, optional = true }
-maud = { version = "0.27.0", default-features = false, optional = true }
+lazy_static = "1.5.0"
+rayon = "1.10"
 semver = { version = "1.0.23", default-features = false, features = ["serde", "std"] }
 serde = { version = "1.0.197", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 sha2 = { version = "0.10.8", default-features = false }
-snafu.workspace = true
 tar = { version = "0.4.40", default-features = false }
 toml = { version = "0.8.12", default-features = false, features = ["parse", "display"] }
 url = { version = "2.5.0", default-features = false, features = ["serde"] }
 walkdir = { version = "2.5.0", default-features = false }
+anyhow = "1"
+thiserror = "2"
 
 [dev-dependencies]
 registry-conformance.workspace = true
 tokio.workspace = true
+assert_fs = "1.1"
+predicates = "3.1"

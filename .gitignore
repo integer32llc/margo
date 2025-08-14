@@ -1,5 +1,11 @@
-/.parcel-cache
-/node_modules
-/src/html/assets.rs
-/target
-/ui/dist
+.idea/
+.parcel-cache/
+
+node_modules/
+target/
+dist/
+
+src/html/assets.rs
+src/templates/*
+
+.DS_Store
