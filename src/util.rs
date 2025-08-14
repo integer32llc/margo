@@ -105,6 +105,7 @@ impl<T> VecExt<T> for Vec<T> {
 mod test {
     use super::*;
     use std::str::FromStr;
+    use assert_fs::TempDir;
 
     #[test]
     fn url_ext_ensure_trailing_slash() {
@@ -136,9 +137,28 @@ mod test {
     }
 
     #[test]
+    fn path_ext_remove_dirs_if_empty() {
+        let dir = TempDir::new().unwrap();
+
+        let a = dir.join("a");
+        fs::create_dir_all(&a).unwrap();
+        fs::write(&a.join(".keep"), "hello world").unwrap();
+
+        let b = a.join("b");
+        let c = b.join("c");
+        fs::create_dir_all(&c).unwrap();
+
+        c.remove_dirs_if_empty().unwrap();
+        assert!(a.exists(), "a should still exist as it contains a file");
+        assert!(!b.exists(), "b should be removed");
+        assert!(!c.exists(), "c should be removed");
+    }
+
+    #[test]
     fn vec_ext_sorted_by() {
         let vec = vec![1, 5, 3];
         let sorted = vec.sorted_by(|a, b| a.cmp(&b));
         assert_eq!(sorted, vec![1, 3, 5]);
     }
+
 }
