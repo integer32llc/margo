@@ -5,6 +5,4 @@ node_modules/
 target/
 dist/
 
-src/html/assets.rs
-
 .DS_Store

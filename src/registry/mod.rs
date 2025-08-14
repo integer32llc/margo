@@ -1,4 +1,3 @@
-mod error;
 mod index;
 mod packaged_cargo_toml;
 mod packaged_crate;
