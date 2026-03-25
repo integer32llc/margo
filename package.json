@@ -20,7 +20,7 @@
     "postcss": "^8.4.38",
     "prettier": "^3.2.5",
     "tailwindcss": "^4.0.9",
-    "typescript": "^5.4.5"
+    "typescript": "^6.0.0"
   },
   "scripts": {
     "watch": "parcel watch",
