@@ -20,7 +20,7 @@ runs:
   steps:
     # https://doc.rust-lang.org/1.77.2/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
     - name: Cargo cache (home)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: |-
           /home/runner/.cargo/.crates.toml
@@ -33,7 +33,7 @@ runs:
           cargo-home-${{ inputs.key }}-
 
     - name: Cargo cache (build)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ inputs.targets }}
         key: cargo-target-${{ inputs.key }}-${{ runner.os }}-${{ hashFiles(inputs.lockfiles) }}

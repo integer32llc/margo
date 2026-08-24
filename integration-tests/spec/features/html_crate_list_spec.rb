@@ -28,7 +28,7 @@ RSpec.describe 'The HTML crate list', type: :feature do
     aggregate_failures do
       names.each do |name|
         within(:section, 'Available crates') do
-          expect(page).to have_content(name)
+          expect(page).to have_text(name)
           expect(page).to have_select('version', with_options: ['1.0.0'])
         end
       end
@@ -51,7 +51,7 @@ RSpec.describe 'The HTML crate list', type: :feature do
 
       aggregate_failures do
         within(:section, 'Available crates') do
-          expect(page).to have_content(name)
+          expect(page).to have_text(name)
           expect(page).to have_select('version', with_options: ['1.0.0', '2.0.0', '3.0.0'], selected: '3.0.0')
         end
       end
@@ -74,7 +74,7 @@ RSpec.describe 'The HTML crate list', type: :feature do
 
       aggregate_failures do
         within(:section, 'Available crates') do
-          expect(page).to have_content(name)
+          expect(page).to have_text(name)
           expect(page).to have_select('version', with_options: ['1.0.0', '2.0.0 (yanked)'], selected: '1.0.0')
         end
       end

@@ -1,6 +1,6 @@
 # https://docs.rubocop.org/rubocop/configuration
 
-require:
+plugins:
   - rubocop-capybara
   - rubocop-rspec
 
