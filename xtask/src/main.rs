@@ -158,7 +158,7 @@ fn do_assets_watch(
     loop {
         for thread_slot in &mut threads {
             if let Some(t) = thread_slot.take() {
-                if dbg!(t.is_finished()) {
+                if t.is_finished() {
                     return match t.join() {
                         Ok(Ok(())) => ThreadExitSnafu.fail(),
                         Ok(e) => e,
