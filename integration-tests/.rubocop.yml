@@ -1,9 +1,7 @@
 # https://docs.rubocop.org/rubocop/configuration
 
-require:
-  - rubocop-capybara
-
 plugins:
+  - rubocop-capybara
   - rubocop-rspec
 
 AllCops:
